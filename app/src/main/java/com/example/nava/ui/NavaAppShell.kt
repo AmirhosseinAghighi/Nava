@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Download
@@ -19,8 +20,10 @@ import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,6 +35,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -40,12 +44,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.example.nava.R
 import com.example.nava.domain.auth.AuthSession
+import com.example.nava.domain.catalog.HomeTrack
 import com.example.nava.domain.preferences.AppLanguage
 import com.example.nava.domain.preferences.ThemeMode
 import com.example.nava.domain.preferences.UserPreferences
 import com.example.nava.ui.theme.NavaSpacing
+import com.example.nava.ui.home.HomeUiState
+import com.example.nava.ui.home.HomeViewModel
 
 private data class NavItem(@StringRes val title: Int, val icon: ImageVector)
 
@@ -101,62 +109,97 @@ fun NavaAppShell(
 }
 
 @Composable
-private fun HomeShell(modifier: Modifier) {
+private fun HomeShell(
+    modifier: Modifier,
+    viewModel: HomeViewModel = hiltViewModel(),
+) {
+    val state by viewModel.uiState.collectAsState()
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xl),
     ) {
         item { Text(stringResource(R.string.home_welcome), modifier = Modifier.padding(horizontal = NavaSpacing.Lg), style = MaterialTheme.typography.headlineSmall) }
-        item {
-            LazyRow(
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NavaSpacing.Lg),
-                horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
-            ) {
-                items(3) { FeaturedCard() }
-            }
+        when (val current = state) {
+            HomeUiState.Loading -> item { HomeLoading() }
+            HomeUiState.Error -> item { HomeError(onRetry = viewModel::reload) }
+            is HomeUiState.Content -> homeContent(current)
         }
-        item {
-            LazyRow(
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NavaSpacing.Lg),
-                horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
-            ) {
-                item { QuickAction(R.string.quick_liked) }
-                item { QuickAction(R.string.quick_recent) }
-                item { QuickAction(R.string.quick_playlists) }
-                item { QuickAction(R.string.quick_artists) }
-            }
+    }
+}
+
+private fun androidx.compose.foundation.lazy.LazyListScope.homeContent(state: HomeUiState.Content) {
+    item {
+        LazyRow(
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NavaSpacing.Lg),
+            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            items(state.feed.featured, key = HomeTrack::id) { FeaturedCard(it) }
         }
-        item { DiscoverySection(R.string.home_trending) }
-        item { DiscoverySection(R.string.home_newest) }
-        item { DiscoverySection(R.string.home_global) }
-        item { DiscoverySection(R.string.home_local) }
+    }
+    item {
+        LazyRow(
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NavaSpacing.Lg),
+            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+        ) {
+            item { QuickAction(R.string.quick_liked) }
+            item { QuickAction(R.string.quick_recent) }
+            item { QuickAction(R.string.quick_playlists) }
+            item { QuickAction(R.string.quick_artists) }
+        }
+    }
+    item { DiscoverySection(R.string.home_trending, state.feed.trending) }
+    item { DiscoverySection(R.string.home_newest, state.feed.newest) }
+    item { DiscoverySection(R.string.home_global, state.feed.global) }
+    item { DiscoverySection(R.string.home_local, state.feed.local) }
+}
+
+@Composable
+private fun HomeLoading() {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Xl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) { CircularProgressIndicator() }
+}
+
+@Composable
+private fun HomeError(onRetry: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Xl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+    ) {
+        Text(stringResource(R.string.home_load_error), style = MaterialTheme.typography.bodyLarge)
+        Button(onClick = onRetry) { Text(stringResource(R.string.retry)) }
     }
 }
 
 @Composable
-private fun FeaturedCard() {
+private fun FeaturedCard(track: HomeTrack) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column(modifier = Modifier.padding(NavaSpacing.Xl), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-            Text(stringResource(R.string.home_featured), style = MaterialTheme.typography.titleLarge)
-            Text(stringResource(R.string.home_carousel_caption), style = MaterialTheme.typography.bodyMedium)
+            Text(track.title, style = MaterialTheme.typography.titleLarge)
+            Text(track.artistName, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
 
 @Composable
-private fun DiscoverySection(@StringRes title: Int) {
+private fun DiscoverySection(@StringRes title: Int, tracks: List<HomeTrack>) {
     Column(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
         Text(stringResource(title), modifier = Modifier.padding(horizontal = NavaSpacing.Lg), style = MaterialTheme.typography.titleLarge)
         LazyRow(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NavaSpacing.Lg),
             horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
         ) {
-            items(4) {
+            items(tracks, key = HomeTrack::id) { track ->
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                    Text(stringResource(R.string.home_carousel_caption), modifier = Modifier.padding(NavaSpacing.Lg), style = MaterialTheme.typography.bodyMedium)
+                    Column(modifier = Modifier.padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                        Text(track.title, style = MaterialTheme.typography.titleMedium)
+                        Text(track.artistName, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             }
         }

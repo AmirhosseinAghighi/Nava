@@ -41,4 +41,6 @@
     <string name="home_global">Global playlists</string>
     <string name="home_local">Local playlists</string>
     <string name="home_carousel_caption">Fresh sounds from the Nava catalog</string>
+    <string name="home_load_error">We could not load the catalog right now.</string>
+    <string name="retry">Try again</string>
 </resources>

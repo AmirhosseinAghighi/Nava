@@ -26,6 +26,7 @@ sealed interface NavaUiState {
 
 sealed interface NavaEvent {
     data class SignIn(val email: String, val password: String) : NavaEvent
+    data class SignUp(val email: String, val password: String) : NavaEvent
     data class SetTheme(val mode: ThemeMode) : NavaEvent
     data class SetLanguage(val language: AppLanguage) : NavaEvent
     data object SignOut : NavaEvent
@@ -48,6 +49,8 @@ class NavaViewModel @Inject constructor(
     fun onEvent(event: NavaEvent) = viewModelScope.launch {
         when (event) {
             is NavaEvent.SignIn -> authRepository.signIn(event.email, event.password)
+                .onFailure { effectChannel.send(NavaEffect.InvalidCredentials) }
+            is NavaEvent.SignUp -> authRepository.signUp(event.email, event.password)
                 .onFailure { effectChannel.send(NavaEffect.InvalidCredentials) }
             is NavaEvent.SetTheme -> preferencesRepository.setThemeMode(event.mode)
             is NavaEvent.SetLanguage -> preferencesRepository.setLanguage(event.language)

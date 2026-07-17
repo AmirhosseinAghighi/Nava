@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.Flow
 @Composable
 fun AuthScreen(
     onSignIn: (String, String) -> Unit,
+    onSignUp: (String, String) -> Unit,
     effects: Flow<NavaEffect>,
 ) {
     var email by remember { mutableStateOf("") }
@@ -66,7 +67,7 @@ fun AuthScreen(
             Button(onClick = { onSignIn(email, password) }, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.sign_in))
             }
-            OutlinedButton(onClick = { onSignIn(email, password) }, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = { onSignUp(email, password) }, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.create_account))
             }
         }

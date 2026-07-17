@@ -68,6 +68,7 @@ private fun NavaRoot(viewModel: NavaViewModel = hiltViewModel()) {
             NavaUiState.Loading -> LoadingContent()
             is NavaUiState.SignedOut -> AuthScreen(
                 onSignIn = { email, password -> viewModel.onEvent(NavaEvent.SignIn(email, password)) },
+                onSignUp = { email, password -> viewModel.onEvent(NavaEvent.SignUp(email, password)) },
                 effects = viewModel.effects,
             )
             is NavaUiState.SignedIn -> NavaAppShell(

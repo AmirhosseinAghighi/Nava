@@ -7,6 +7,7 @@ data class AuthSession(val email: String)
 interface AuthRepository {
     val session: Flow<AuthSession?>
     suspend fun signIn(email: String, password: String): Result<Unit>
+    suspend fun signUp(email: String, password: String): Result<Unit>
     suspend fun signOut()
 }
 

@@ -41,4 +41,6 @@
     <string name="home_global">پلی‌لیست‌های جهانی</string>
     <string name="home_local">پلی‌لیست‌های محلی</string>
     <string name="home_carousel_caption">صداهای تازه از کاتالوگ نوا</string>
+    <string name="home_load_error">فعلاً کاتالوگ بارگیری نشد.</string>
+    <string name="retry">تلاش دوباره</string>
 </resources>
