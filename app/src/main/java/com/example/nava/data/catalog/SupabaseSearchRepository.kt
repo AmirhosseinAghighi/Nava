@@ -1,6 +1,7 @@
 package com.example.nava.data.catalog
 
 import com.example.nava.domain.catalog.SearchRepository
+import com.example.nava.domain.catalog.SearchPage
 import com.example.nava.domain.catalog.SearchTrack
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
@@ -14,17 +15,17 @@ import javax.inject.Singleton
 
 @Singleton
 class SupabaseSearchRepository @Inject constructor(private val supabase: SupabaseClient) : SearchRepository {
-    override suspend fun search(query: String, language: String?): Result<List<SearchTrack>> = runCatching {
+    override suspend fun search(query: String, language: String?, offset: Int): Result<SearchPage> = runCatching {
         supabase.postgrest.rpc("search_catalog", buildJsonObject {
             put("p_query", query)
             put("p_language_code", language?.let(::JsonPrimitive) ?: kotlinx.serialization.json.JsonNull)
             put("p_limit", 30)
-            put("p_offset", 0)
-        }).decodeList<SearchTrackDto>().map { SearchTrack(it.id, it.title, it.artistName, it.genre, it.languageCode) }
+            put("p_offset", offset)
+        }).decodeList<SearchTrackDto>().let { rows -> SearchPage(rows.map { SearchTrack(it.id, it.title, it.artistName, it.genre, it.languageCode) }, rows.firstOrNull()?.totalCount ?: 0) }
     }
 }
 
 @Serializable private data class SearchTrackDto(
     val id: String, val title: String, @SerialName("artist_name") val artistName: String,
-    val genre: String, @SerialName("language_code") val languageCode: String,
+    val genre: String, @SerialName("language_code") val languageCode: String, @SerialName("total_count") val totalCount: Long,
 )

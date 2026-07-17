@@ -36,6 +36,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -125,7 +126,10 @@ private fun SearchShell(modifier: Modifier, viewModel: SearchViewModel = hiltVie
             state.loading -> CircularProgressIndicator()
             state.failed -> Text(stringResource(R.string.search_error))
             state.query.isNotBlank() && state.results.isEmpty() -> Text(stringResource(R.string.search_empty))
-            else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) { items(state.results, key = { it.id }) { track -> Card { Column(Modifier.padding(NavaSpacing.Md)) { Text(track.title, style = MaterialTheme.typography.titleMedium); Text(track.artistName, style = MaterialTheme.typography.bodyMedium) } } } }
+            else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                items(state.results, key = { it.id }) { track -> Card { Column(Modifier.padding(NavaSpacing.Md)) { Text(track.title, style = MaterialTheme.typography.titleMedium); Text(track.artistName, style = MaterialTheme.typography.bodyMedium) } } }
+                if (state.canLoadMore) item { LaunchedEffect(state.results.size) { viewModel.loadMore() }; CircularProgressIndicator() }
+            }
         }
     }
 }
