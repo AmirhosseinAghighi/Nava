@@ -7,6 +7,9 @@
     <string name="sign_in">Sign in</string>
     <string name="create_account">Create account</string>
     <string name="invalid_credentials">Enter a valid email and a password of at least 6 characters.</string>
+    <string name="authentication_failed">We could not complete that request. Check your connection and account details, then try again.</string>
+    <string name="account_confirmation_sent">Account request received. Check your email to confirm the account before signing in.</string>
+    <string name="auth_working">Please wait…</string>
     <string name="home">Home</string>
     <string name="search">Search</string>
     <string name="downloads">Downloads</string>

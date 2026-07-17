@@ -1,6 +1,7 @@
 package com.example.nava
 
 import android.os.Bundle
+import android.content.Intent
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -28,13 +29,25 @@ import com.example.nava.ui.NavaViewModel
 import com.example.nava.ui.auth.AuthScreen
 import com.example.nava.ui.theme.NavaTheme
 import dagger.hilt.android.AndroidEntryPoint
+import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.auth.handleDeeplinks
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
+    @Inject lateinit var supabase: SupabaseClient
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        supabase.handleDeeplinks(intent)
         enableEdgeToEdge()
         setContent { NavaRoot() }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        supabase.handleDeeplinks(intent)
     }
 }
 
@@ -69,6 +82,7 @@ private fun NavaRoot(viewModel: NavaViewModel = hiltViewModel()) {
             is NavaUiState.SignedOut -> AuthScreen(
                 onSignIn = { email, password -> viewModel.onEvent(NavaEvent.SignIn(email, password)) },
                 onSignUp = { email, password -> viewModel.onEvent(NavaEvent.SignUp(email, password)) },
+                isAuthenticating = current.isAuthenticating,
                 effects = viewModel.effects,
             )
             is NavaUiState.SignedIn -> NavaAppShell(

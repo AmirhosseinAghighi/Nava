@@ -34,7 +34,7 @@ class SupabaseAuthRepository @Inject constructor(
 
     override suspend fun signUp(email: String, password: String): Result<Unit> = runCatching {
         require(AuthValidator.isValid(email, password))
-        supabase.auth.signUpWith(Email) {
+        supabase.auth.signUpWith(Email, redirectUrl = NavaAuthRedirect.Url) {
             this.email = email.trim()
             this.password = password
         }

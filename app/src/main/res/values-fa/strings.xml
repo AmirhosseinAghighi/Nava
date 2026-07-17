@@ -7,6 +7,9 @@
     <string name="sign_in">ورود</string>
     <string name="create_account">ساخت حساب</string>
     <string name="invalid_credentials">یک ایمیل معتبر و گذرواژه حداقل ۶ کاراکتری وارد کنید.</string>
+    <string name="authentication_failed">درخواست انجام نشد. اتصال و مشخصات حساب را بررسی کنید و دوباره تلاش کنید.</string>
+    <string name="account_confirmation_sent">درخواست ساخت حساب ثبت شد. پیش از ورود، ایمیل تأیید را بررسی کنید.</string>
+    <string name="auth_working">لطفاً صبر کنید…</string>
     <string name="home">خانه</string>
     <string name="search">جستجو</string>
     <string name="downloads">دانلودها</string>
