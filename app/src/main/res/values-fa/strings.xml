@@ -35,4 +35,10 @@
     <string name="quick_recent">اخیراً پخش‌شده</string>
     <string name="quick_playlists">پلی‌لیست‌های من</string>
     <string name="quick_artists">هنرمندان برتر</string>
+    <string name="home_featured">پیشنهادهای ویژه</string>
+    <string name="home_trending">پرطرفدارهای امروز</string>
+    <string name="home_newest">انتشارهای جدید</string>
+    <string name="home_global">پلی‌لیست‌های جهانی</string>
+    <string name="home_local">پلی‌لیست‌های محلی</string>
+    <string name="home_carousel_caption">صداهای تازه از کاتالوگ نوا</string>
 </resources>

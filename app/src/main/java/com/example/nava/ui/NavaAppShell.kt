@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Download
@@ -18,6 +19,8 @@ import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -99,15 +102,64 @@ fun NavaAppShell(
 
 @Composable
 private fun HomeShell(modifier: Modifier) {
-    Column(modifier = modifier.fillMaxSize().padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Lg)) {
-        Text(stringResource(R.string.home_welcome), style = MaterialTheme.typography.headlineSmall)
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-            item { QuickAction(R.string.quick_liked) }
-            item { QuickAction(R.string.quick_recent) }
-            item { QuickAction(R.string.quick_playlists) }
-            item { QuickAction(R.string.quick_artists) }
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xl),
+    ) {
+        item { Text(stringResource(R.string.home_welcome), modifier = Modifier.padding(horizontal = NavaSpacing.Lg), style = MaterialTheme.typography.headlineSmall) }
+        item {
+            LazyRow(
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NavaSpacing.Lg),
+                horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+            ) {
+                items(3) { FeaturedCard() }
+            }
         }
-        Text(stringResource(R.string.shell_placeholder), style = MaterialTheme.typography.bodyLarge)
+        item {
+            LazyRow(
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NavaSpacing.Lg),
+                horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+            ) {
+                item { QuickAction(R.string.quick_liked) }
+                item { QuickAction(R.string.quick_recent) }
+                item { QuickAction(R.string.quick_playlists) }
+                item { QuickAction(R.string.quick_artists) }
+            }
+        }
+        item { DiscoverySection(R.string.home_trending) }
+        item { DiscoverySection(R.string.home_newest) }
+        item { DiscoverySection(R.string.home_global) }
+        item { DiscoverySection(R.string.home_local) }
+    }
+}
+
+@Composable
+private fun FeaturedCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column(modifier = Modifier.padding(NavaSpacing.Xl), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+            Text(stringResource(R.string.home_featured), style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.home_carousel_caption), style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+@Composable
+private fun DiscoverySection(@StringRes title: Int) {
+    Column(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
+        Text(stringResource(title), modifier = Modifier.padding(horizontal = NavaSpacing.Lg), style = MaterialTheme.typography.titleLarge)
+        LazyRow(
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NavaSpacing.Lg),
+            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            items(4) {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                    Text(stringResource(R.string.home_carousel_caption), modifier = Modifier.padding(NavaSpacing.Lg), style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
     }
 }
 
