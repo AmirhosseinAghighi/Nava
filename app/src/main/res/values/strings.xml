@@ -12,6 +12,9 @@
     <string name="auth_working">Please wait…</string>
     <string name="home">Home</string>
     <string name="search">Search</string>
+    <string name="search_catalog">Search tracks or artists</string>
+    <string name="filter_all">All</string><string name="filter_english">English</string><string name="filter_persian">Persian</string>
+    <string name="search_error">Search is unavailable. Try again.</string><string name="search_empty">No matching music found.</string>
     <string name="downloads">Downloads</string>
     <string name="playlists">Playlists</string>
     <string name="profile">Profile</string>

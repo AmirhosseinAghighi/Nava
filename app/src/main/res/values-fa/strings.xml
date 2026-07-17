@@ -12,6 +12,9 @@
     <string name="auth_working">لطفاً صبر کنید…</string>
     <string name="home">خانه</string>
     <string name="search">جستجو</string>
+    <string name="search_catalog">جستجوی آهنگ یا هنرمند</string>
+    <string name="filter_all">همه</string><string name="filter_english">انگلیسی</string><string name="filter_persian">فارسی</string>
+    <string name="search_error">جستجو در دسترس نیست. دوباره تلاش کنید.</string><string name="search_empty">موسیقی مطابقی پیدا نشد.</string>
     <string name="downloads">دانلودها</string>
     <string name="playlists">پلی‌لیست‌ها</string>
     <string name="profile">پروفایل</string>

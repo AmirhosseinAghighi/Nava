@@ -30,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -54,6 +55,7 @@ import com.example.nava.domain.preferences.UserPreferences
 import com.example.nava.ui.theme.NavaSpacing
 import com.example.nava.ui.home.HomeUiState
 import com.example.nava.ui.home.HomeViewModel
+import com.example.nava.ui.search.SearchViewModel
 
 private data class NavItem(@StringRes val title: Int, val icon: ImageVector)
 
@@ -102,8 +104,28 @@ fun NavaAppShell(
     ) { padding ->
         when (selectedIndex) {
             0 -> HomeShell(modifier = Modifier.padding(padding))
+            1 -> SearchShell(modifier = Modifier.padding(padding))
             4 -> ProfileShell(session, preferences, onEvent, Modifier.padding(padding))
             else -> PlaceholderShell(navigationItems[selectedIndex].title, Modifier.padding(padding))
+        }
+    }
+}
+
+@Composable
+private fun SearchShell(modifier: Modifier, viewModel: SearchViewModel = hiltViewModel()) {
+    val state by viewModel.state.collectAsState()
+    Column(modifier = modifier.fillMaxSize().padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
+        OutlinedTextField(value = state.query, onValueChange = viewModel::updateQuery, label = { Text(stringResource(R.string.search_catalog)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+            AssistChip(onClick = { viewModel.setLanguage(null) }, label = { Text(stringResource(R.string.filter_all)) })
+            AssistChip(onClick = { viewModel.setLanguage("en") }, label = { Text(stringResource(R.string.filter_english)) })
+            AssistChip(onClick = { viewModel.setLanguage("fa") }, label = { Text(stringResource(R.string.filter_persian)) })
+        }
+        when {
+            state.loading -> CircularProgressIndicator()
+            state.failed -> Text(stringResource(R.string.search_error))
+            state.query.isNotBlank() && state.results.isEmpty() -> Text(stringResource(R.string.search_empty))
+            else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) { items(state.results, key = { it.id }) { track -> Card { Column(Modifier.padding(NavaSpacing.Md)) { Text(track.title, style = MaterialTheme.typography.titleMedium); Text(track.artistName, style = MaterialTheme.typography.bodyMedium) } } } }
         }
     }
 }
