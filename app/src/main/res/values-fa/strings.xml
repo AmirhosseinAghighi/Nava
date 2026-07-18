@@ -38,6 +38,7 @@
     <string name="navigation">ناوبری اصلی</string>
     <string name="top_bar_brand">نوا</string>
     <string name="notification">اعلان‌ها</string>
+    <string name="pause_playback">توقف پخش</string>
     <string name="quick_liked">آهنگ‌های پسندیده</string>
     <string name="quick_recent">اخیراً پخش‌شده</string>
     <string name="quick_playlists">پلی‌لیست‌های من</string>

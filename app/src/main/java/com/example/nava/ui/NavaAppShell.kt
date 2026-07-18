@@ -19,6 +19,8 @@ import androidx.compose.material.icons.outlined.ManageSearch
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -59,6 +61,8 @@ import com.example.nava.ui.home.HomeViewModel
 import com.example.nava.ui.search.SearchViewModel
 import com.example.nava.ui.library.LibraryUiState
 import com.example.nava.ui.library.LibraryViewModel
+import com.example.nava.playback.NowPlaying
+import com.example.nava.playback.PlaybackViewModel
 
 private data class NavItem(@StringRes val title: Int, val icon: ImageVector)
 
@@ -78,6 +82,8 @@ fun NavaAppShell(
     onEvent: (NavaEvent) -> Unit,
 ) {
     var selectedIndex by rememberSaveable { mutableIntStateOf(0) }
+    val playbackViewModel: PlaybackViewModel = hiltViewModel()
+    val nowPlaying by playbackViewModel.nowPlaying.collectAsState()
     Scaffold(
         topBar = {
             TopAppBar(
@@ -93,24 +99,42 @@ fun NavaAppShell(
             )
         },
         bottomBar = {
-            NavigationBar {
-                navigationItems.forEachIndexed { index, item ->
-                    NavigationBarItem(
-                        selected = index == selectedIndex,
-                        onClick = { selectedIndex = index },
-                        icon = { Icon(item.icon, contentDescription = null) },
-                        label = { Text(stringResource(item.title)) },
-                    )
+            Column {
+                nowPlaying?.let { MiniPlayer(it, playbackViewModel::pause) }
+                NavigationBar {
+                    navigationItems.forEachIndexed { index, item ->
+                        NavigationBarItem(
+                            selected = index == selectedIndex,
+                            onClick = { selectedIndex = index },
+                            icon = { Icon(item.icon, contentDescription = null) },
+                            label = { Text(stringResource(item.title)) },
+                        )
+                    }
                 }
             }
         },
     ) { padding ->
         when (selectedIndex) {
-            0 -> HomeShell(modifier = Modifier.padding(padding))
+            0 -> HomeShell(modifier = Modifier.padding(padding), onPlay = playbackViewModel::play)
             1 -> SearchShell(modifier = Modifier.padding(padding))
             3 -> LibraryShell(modifier = Modifier.padding(padding))
             4 -> ProfileShell(session, preferences, onEvent, Modifier.padding(padding))
             else -> PlaceholderShell(navigationItems[selectedIndex].title, Modifier.padding(padding))
+        }
+    }
+}
+
+@Composable
+private fun MiniPlayer(nowPlaying: NowPlaying, onPause: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth(), onClick = {}) {
+        Row(modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Md), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(nowPlaying.track.title, style = MaterialTheme.typography.titleMedium)
+                Text(nowPlaying.track.artistName, style = MaterialTheme.typography.bodyMedium)
+            }
+            IconButton(onClick = onPause) {
+                Icon(if (nowPlaying.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, contentDescription = stringResource(R.string.pause_playback))
+            }
         }
     }
 }
@@ -156,6 +180,7 @@ private fun SearchShell(modifier: Modifier, viewModel: SearchViewModel = hiltVie
 private fun HomeShell(
     modifier: Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
+    onPlay: (HomeTrack) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
     LazyColumn(
@@ -166,18 +191,18 @@ private fun HomeShell(
         when (val current = state) {
             HomeUiState.Loading -> item { HomeLoading() }
             HomeUiState.Error -> item { HomeError(onRetry = viewModel::reload) }
-            is HomeUiState.Content -> homeContent(current)
+            is HomeUiState.Content -> homeContent(current, onPlay)
         }
     }
 }
 
-private fun androidx.compose.foundation.lazy.LazyListScope.homeContent(state: HomeUiState.Content) {
+private fun androidx.compose.foundation.lazy.LazyListScope.homeContent(state: HomeUiState.Content, onPlay: (HomeTrack) -> Unit) {
     item {
         LazyRow(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NavaSpacing.Lg),
             horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
         ) {
-            items(state.feed.featured, key = HomeTrack::id) { FeaturedCard(it) }
+            items(state.feed.featured, key = HomeTrack::id) { FeaturedCard(it, onPlay) }
         }
     }
     item {
@@ -191,10 +216,10 @@ private fun androidx.compose.foundation.lazy.LazyListScope.homeContent(state: Ho
             item { QuickAction(R.string.quick_artists) }
         }
     }
-    item { DiscoverySection(R.string.home_trending, state.feed.trending) }
-    item { DiscoverySection(R.string.home_newest, state.feed.newest) }
-    item { DiscoverySection(R.string.home_global, state.feed.global) }
-    item { DiscoverySection(R.string.home_local, state.feed.local) }
+    item { DiscoverySection(R.string.home_trending, state.feed.trending, onPlay) }
+    item { DiscoverySection(R.string.home_newest, state.feed.newest, onPlay) }
+    item { DiscoverySection(R.string.home_global, state.feed.global, onPlay) }
+    item { DiscoverySection(R.string.home_local, state.feed.local, onPlay) }
 }
 
 @Composable
@@ -218,8 +243,9 @@ private fun HomeError(onRetry: () -> Unit) {
 }
 
 @Composable
-private fun FeaturedCard(track: HomeTrack) {
+private fun FeaturedCard(track: HomeTrack, onPlay: (HomeTrack) -> Unit) {
     Card(
+        onClick = { onPlay(track) },
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
@@ -231,7 +257,7 @@ private fun FeaturedCard(track: HomeTrack) {
 }
 
 @Composable
-private fun DiscoverySection(@StringRes title: Int, tracks: List<HomeTrack>) {
+private fun DiscoverySection(@StringRes title: Int, tracks: List<HomeTrack>, onPlay: (HomeTrack) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
         Text(stringResource(title), modifier = Modifier.padding(horizontal = NavaSpacing.Lg), style = MaterialTheme.typography.titleLarge)
         LazyRow(
@@ -239,7 +265,7 @@ private fun DiscoverySection(@StringRes title: Int, tracks: List<HomeTrack>) {
             horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
         ) {
             items(tracks, key = HomeTrack::id) { track ->
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                Card(onClick = { onPlay(track) }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                     Column(modifier = Modifier.padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
                         Text(track.title, style = MaterialTheme.typography.titleMedium)
                         Text(track.artistName, style = MaterialTheme.typography.bodyMedium)

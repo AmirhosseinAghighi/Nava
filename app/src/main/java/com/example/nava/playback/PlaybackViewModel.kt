@@ -1,0 +1,45 @@
+package com.example.nava.playback
+
+import android.app.Application
+import android.content.Intent
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.nava.domain.catalog.HomeTrack
+import dagger.hilt.android.lifecycle.HiltViewModel
+import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.postgrest.postgrest
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import javax.inject.Inject
+
+data class NowPlaying(val track: HomeTrack, val playing: Boolean)
+
+@HiltViewModel
+class PlaybackViewModel @Inject constructor(
+    application: Application,
+    private val resolver: SignedAudioUrlResolver,
+    private val supabase: SupabaseClient,
+) : AndroidViewModel(application) {
+    private val _nowPlaying = MutableStateFlow<NowPlaying?>(null)
+    val nowPlaying: StateFlow<NowPlaying?> = _nowPlaying.asStateFlow()
+
+    fun play(track: HomeTrack) = viewModelScope.launch {
+        runCatching { resolver.resolve(track.audioUrl) }.onSuccess { url ->
+            getApplication<Application>().startForegroundService(Intent(getApplication(), NavaPlaybackService::class.java).apply {
+                action = NavaPlaybackService.ACTION_PLAY_URI
+                putExtra(NavaPlaybackService.EXTRA_URI, url)
+            })
+            _nowPlaying.value = NowPlaying(track, true)
+            runCatching { supabase.postgrest.rpc("record_playback_event", buildJsonObject { put("p_track_id", track.id); put("p_event_type", "started") }) }
+        }
+    }
+
+    fun pause() {
+        getApplication<Application>().startService(Intent(getApplication(), NavaPlaybackService::class.java).setAction(NavaPlaybackService.ACTION_PAUSE))
+        _nowPlaying.value = _nowPlaying.value?.copy(playing = false)
+    }
+}

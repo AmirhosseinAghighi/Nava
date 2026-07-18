@@ -38,6 +38,7 @@
     <string name="navigation">Main navigation</string>
     <string name="top_bar_brand">Nava</string>
     <string name="notification">Notifications</string>
+    <string name="pause_playback">Pause playback</string>
     <string name="quick_liked">Liked songs</string>
     <string name="quick_recent">Recently played</string>
     <string name="quick_playlists">My playlists</string>
