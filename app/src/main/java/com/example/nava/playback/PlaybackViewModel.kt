@@ -43,6 +43,11 @@ class PlaybackViewModel @Inject constructor(
         _nowPlaying.value = _nowPlaying.value?.copy(playing = false)
     }
 
+    fun resume() {
+        getApplication<Application>().startService(Intent(getApplication(), NavaPlaybackService::class.java).setAction(NavaPlaybackService.ACTION_RESUME))
+        _nowPlaying.value = _nowPlaying.value?.copy(playing = true)
+    }
+
     fun seekTo(positionMs: Long) = send(NavaPlaybackService.ACTION_SEEK, NavaPlaybackService.EXTRA_POSITION_MS to positionMs)
     fun setSpeed(speed: Float) = send(NavaPlaybackService.ACTION_SPEED, NavaPlaybackService.EXTRA_SPEED to speed)
     fun setSleepTimer(minutes: Long) = send(NavaPlaybackService.ACTION_SLEEP, NavaPlaybackService.EXTRA_SLEEP_MS to minutes * 60_000L)

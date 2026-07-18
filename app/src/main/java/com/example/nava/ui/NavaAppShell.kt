@@ -109,7 +109,13 @@ fun NavaAppShell(
         },
         bottomBar = {
             Column {
-                nowPlaying?.let { MiniPlayer(it, playbackViewModel::pause, onOpen = { playerExpanded = true }) }
+                nowPlaying?.let {
+                    MiniPlayer(
+                        nowPlaying = it,
+                        onToggle = { if (it.playing) playbackViewModel.pause() else playbackViewModel.resume() },
+                        onOpen = { playerExpanded = true },
+                    )
+                }
                 NavigationBar {
                     navigationItems.forEachIndexed { index, item ->
                         NavigationBarItem(
@@ -132,27 +138,36 @@ fun NavaAppShell(
         }
     }
     nowPlaying?.takeIf { playerExpanded }?.let { now ->
-        FullPlayer(now, onDismiss = { playerExpanded = false }, onPause = playbackViewModel::pause, onSpeed = playbackViewModel::setSpeed, onSleep = playbackViewModel::setSleepTimer)
+        FullPlayer(
+            nowPlaying = now,
+            onDismiss = { playerExpanded = false },
+            onToggle = { if (now.playing) playbackViewModel.pause() else playbackViewModel.resume() },
+            onSpeed = playbackViewModel::setSpeed,
+            onSleep = playbackViewModel::setSleepTimer,
+        )
     }
 }
 
 @Composable
-private fun MiniPlayer(nowPlaying: NowPlaying, onPause: () -> Unit, onOpen: () -> Unit) {
+private fun MiniPlayer(nowPlaying: NowPlaying, onToggle: () -> Unit, onOpen: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth(), onClick = onOpen) {
         Row(modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Md), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(nowPlaying.track.title, style = MaterialTheme.typography.titleMedium)
                 Text(nowPlaying.track.artistName, style = MaterialTheme.typography.bodyMedium)
             }
-            IconButton(onClick = onPause) {
-                Icon(if (nowPlaying.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, contentDescription = stringResource(R.string.pause_playback))
+            IconButton(onClick = onToggle) {
+                Icon(
+                    if (nowPlaying.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
+                    contentDescription = stringResource(if (nowPlaying.playing) R.string.pause_playback else R.string.resume_playback),
+                )
             }
         }
     }
 }
 
 @Composable
-private fun FullPlayer(nowPlaying: NowPlaying, onDismiss: () -> Unit, onPause: () -> Unit, onSpeed: (Float) -> Unit, onSleep: (Long) -> Unit) {
+private fun FullPlayer(nowPlaying: NowPlaying, onDismiss: () -> Unit, onToggle: () -> Unit, onSpeed: (Float) -> Unit, onSleep: (Long) -> Unit) {
     val pulse by animateFloatAsState(targetValue = if (nowPlaying.playing) 1f else .35f, animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "visualizer")
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -179,7 +194,11 @@ private fun FullPlayer(nowPlaying: NowPlaying, onDismiss: () -> Unit, onPause: (
                 }
             }
         },
-        confirmButton = { Button(onClick = onPause) { Text(stringResource(R.string.pause_playback)) } },
+        confirmButton = {
+            Button(onClick = onToggle) {
+                Text(stringResource(if (nowPlaying.playing) R.string.pause_playback else R.string.resume_playback))
+            }
+        },
         dismissButton = { Button(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
     )
 }

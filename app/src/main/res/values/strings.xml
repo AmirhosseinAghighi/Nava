@@ -39,6 +39,7 @@
     <string name="top_bar_brand">Nava</string>
     <string name="notification">Notifications</string>
     <string name="pause_playback">Pause playback</string>
+    <string name="resume_playback">Resume playback</string>
     <string name="sleep_15">Sleep 15 min</string><string name="sleep_30">Sleep 30 min</string><string name="close">Close</string>
     <string name="quick_liked">Liked songs</string>
     <string name="quick_recent">Recently played</string>
