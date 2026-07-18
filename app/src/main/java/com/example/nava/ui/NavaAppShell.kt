@@ -194,7 +194,15 @@ fun NavaAppShell(
 private fun MiniPlayer(nowPlaying: NowPlaying, onToggle: () -> Unit, onOpen: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth(), onClick = onOpen) {
         Row(modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Md), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
+            AsyncImage(
+                model = nowPlaying.track.coverImageUrl,
+                contentDescription = stringResource(R.string.now_playing_artwork),
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(NavaSpacing.Xxl)
+                    .clip(MaterialTheme.shapes.medium),
+            )
+            Column(modifier = Modifier.weight(1f).padding(start = NavaSpacing.Sm)) {
                 Text(nowPlaying.track.title, style = MaterialTheme.typography.titleMedium)
                 Text(nowPlaying.track.artistName, style = MaterialTheme.typography.bodyMedium)
             }
@@ -304,7 +312,10 @@ private fun NowPlayingArtwork(nowPlaying: NowPlaying) {
     LaunchedEffect(bitmap) {
         bitmap?.let { cover ->
             paletteColor = withContext(Dispatchers.Default) {
-                Color(Palette.from(cover).generate().getVibrantColor(paletteColor.toArgb()))
+                // Coil may decode artwork as a hardware bitmap. Palette reads pixels directly,
+                // so give it a software copy before generating the player gradient.
+                val softwareBitmap = cover.copy(Bitmap.Config.ARGB_8888, false)
+                Color(Palette.from(softwareBitmap).generate().getVibrantColor(paletteColor.toArgb()))
             }
         }
     }
