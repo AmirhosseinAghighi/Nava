@@ -1,7 +1,11 @@
 package com.example.nava.playback
 
 import android.app.Application
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.nava.domain.catalog.HomeTrack
@@ -16,7 +20,12 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import javax.inject.Inject
 
-data class NowPlaying(val track: HomeTrack, val playing: Boolean)
+data class NowPlaying(
+    val track: HomeTrack,
+    val playing: Boolean,
+    val positionMs: Long = 0L,
+    val durationMs: Long = 0L,
+)
 
 @HiltViewModel
 class PlaybackViewModel @Inject constructor(
@@ -26,16 +35,56 @@ class PlaybackViewModel @Inject constructor(
 ) : AndroidViewModel(application) {
     private val _nowPlaying = MutableStateFlow<NowPlaying?>(null)
     val nowPlaying: StateFlow<NowPlaying?> = _nowPlaying.asStateFlow()
+    private val _playbackError = MutableStateFlow(false)
+    val playbackError: StateFlow<Boolean> = _playbackError.asStateFlow()
+    private var lastRecordedProgressMs = 0L
+    private val playbackStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != NavaPlaybackService.ACTION_PLAYBACK_STATE) return
+            if (intent.getBooleanExtra(NavaPlaybackService.EXTRA_ERROR, false)) _playbackError.value = true
+            val current = _nowPlaying.value ?: return
+            val positionMs = intent.getLongExtra(NavaPlaybackService.EXTRA_POSITION_MS, current.positionMs)
+            val playbackState = intent.getIntExtra(NavaPlaybackService.EXTRA_PLAYBACK_STATE, 0)
+            _nowPlaying.value = current.copy(
+                playing = intent.getBooleanExtra(NavaPlaybackService.EXTRA_PLAYING, current.playing),
+                positionMs = positionMs,
+                durationMs = intent.getLongExtra(NavaPlaybackService.EXTRA_DURATION_MS, current.durationMs),
+            )
+            when {
+                playbackState == androidx.media3.common.Player.STATE_ENDED -> recordEvent(current.track.id, "completed", positionMs)
+                positionMs - lastRecordedProgressMs >= PROGRESS_REPORT_INTERVAL_MS -> {
+                    lastRecordedProgressMs = positionMs
+                    recordEvent(current.track.id, "progress", positionMs)
+                }
+            }
+        }
+    }
+
+    init {
+        ContextCompat.registerReceiver(
+            getApplication(),
+            playbackStateReceiver,
+            IntentFilter(NavaPlaybackService.ACTION_PLAYBACK_STATE),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+    }
 
     fun play(track: HomeTrack) = viewModelScope.launch {
-        runCatching { resolver.resolve(track.audioUrl) }.onSuccess { url ->
-            getApplication<Application>().startForegroundService(Intent(getApplication(), NavaPlaybackService::class.java).apply {
-                action = NavaPlaybackService.ACTION_PLAY_URI
-                putExtra(NavaPlaybackService.EXTRA_URI, url)
-            })
-            _nowPlaying.value = NowPlaying(track, true)
-            runCatching { supabase.postgrest.rpc("record_playback_event", buildJsonObject { put("p_track_id", track.id); put("p_event_type", "started") }) }
-        }
+        runCatching { resolver.resolve(track.audioUrl) }
+            .onSuccess { url ->
+                _playbackError.value = false
+                getApplication<Application>().startForegroundService(Intent(getApplication(), NavaPlaybackService::class.java).apply {
+                    action = NavaPlaybackService.ACTION_PLAY_URI
+                    putExtra(NavaPlaybackService.EXTRA_URI, url)
+                    putExtra(NavaPlaybackService.EXTRA_TITLE, track.title)
+                    putExtra(NavaPlaybackService.EXTRA_ARTIST, track.artistName)
+                    putExtra(NavaPlaybackService.EXTRA_ARTWORK_URI, track.coverImageUrl)
+                })
+                _nowPlaying.value = NowPlaying(track, true)
+                lastRecordedProgressMs = 0L
+                recordEvent(track.id, "started", 0L)
+            }
+            .onFailure { _playbackError.value = true }
     }
 
     fun pause() {
@@ -51,10 +100,34 @@ class PlaybackViewModel @Inject constructor(
     fun seekTo(positionMs: Long) = send(NavaPlaybackService.ACTION_SEEK, NavaPlaybackService.EXTRA_POSITION_MS to positionMs)
     fun setSpeed(speed: Float) = send(NavaPlaybackService.ACTION_SPEED, NavaPlaybackService.EXTRA_SPEED to speed)
     fun setSleepTimer(minutes: Long) = send(NavaPlaybackService.ACTION_SLEEP, NavaPlaybackService.EXTRA_SLEEP_MS to minutes * 60_000L)
+    fun clearPlaybackError() { _playbackError.value = false }
+
+    override fun onCleared() {
+        getApplication<Application>().unregisterReceiver(playbackStateReceiver)
+        super.onCleared()
+    }
+
+    private fun recordEvent(trackId: String, eventType: String, positionMs: Long) = viewModelScope.launch {
+        runCatching {
+            supabase.postgrest.rpc(
+                "record_playback_event",
+                buildJsonObject {
+                    put("p_track_id", trackId)
+                    put("p_event_type", eventType)
+                    put("p_position_seconds", (positionMs / 1_000L).toInt())
+                },
+            )
+        }
+    }
+
     private fun send(action: String, extra: Pair<String, Any>) {
         Intent(getApplication(), NavaPlaybackService::class.java).setAction(action).also { intent ->
             when (val value = extra.second) { is Long -> intent.putExtra(extra.first, value); is Float -> intent.putExtra(extra.first, value) }
             getApplication<Application>().startService(intent)
         }
+    }
+
+    private companion object {
+        const val PROGRESS_REPORT_INTERVAL_MS = 30_000L
     }
 }

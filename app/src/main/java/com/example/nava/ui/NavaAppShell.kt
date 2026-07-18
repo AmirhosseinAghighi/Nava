@@ -1,14 +1,24 @@
 package com.example.nava.ui
 
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
 import androidx.annotation.StringRes
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -36,6 +46,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -45,18 +56,22 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.RepeatMode
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.palette.graphics.Palette
+import coil.compose.AsyncImage
 import com.example.nava.R
 import com.example.nava.domain.auth.AuthSession
 import com.example.nava.domain.catalog.HomeTrack
@@ -71,6 +86,9 @@ import com.example.nava.ui.library.LibraryUiState
 import com.example.nava.ui.library.LibraryViewModel
 import com.example.nava.playback.NowPlaying
 import com.example.nava.playback.PlaybackViewModel
+import com.example.nava.ui.theme.NavaMotion
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private data class NavItem(@StringRes val title: Int, val icon: ImageVector)
 
@@ -93,6 +111,7 @@ fun NavaAppShell(
     var playerExpanded by rememberSaveable { mutableStateOf(false) }
     val playbackViewModel: PlaybackViewModel = hiltViewModel()
     val nowPlaying by playbackViewModel.nowPlaying.collectAsState()
+    val playbackError by playbackViewModel.playbackError.collectAsState()
     Scaffold(
         topBar = {
             TopAppBar(
@@ -142,8 +161,20 @@ fun NavaAppShell(
             nowPlaying = now,
             onDismiss = { playerExpanded = false },
             onToggle = { if (now.playing) playbackViewModel.pause() else playbackViewModel.resume() },
+            onSeek = playbackViewModel::seekTo,
             onSpeed = playbackViewModel::setSpeed,
             onSleep = playbackViewModel::setSleepTimer,
+        )
+    }
+    if (playbackError) {
+        AlertDialog(
+            onDismissRequest = playbackViewModel::clearPlaybackError,
+            text = { Text(stringResource(R.string.playback_unavailable)) },
+            confirmButton = {
+                Button(onClick = playbackViewModel::clearPlaybackError) {
+                    Text(stringResource(R.string.close))
+                }
+            },
         )
     }
 }
@@ -167,14 +198,28 @@ private fun MiniPlayer(nowPlaying: NowPlaying, onToggle: () -> Unit, onOpen: () 
 }
 
 @Composable
-private fun FullPlayer(nowPlaying: NowPlaying, onDismiss: () -> Unit, onToggle: () -> Unit, onSpeed: (Float) -> Unit, onSleep: (Long) -> Unit) {
+private fun FullPlayer(
+    nowPlaying: NowPlaying,
+    onDismiss: () -> Unit,
+    onToggle: () -> Unit,
+    onSeek: (Long) -> Unit,
+    onSpeed: (Float) -> Unit,
+    onSleep: (Long) -> Unit,
+) {
     val pulse by animateFloatAsState(targetValue = if (nowPlaying.playing) 1f else .35f, animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "visualizer")
+    var scrubPosition by rememberSaveable(nowPlaying.track.id) { mutableStateOf(nowPlaying.positionMs.toFloat()) }
+    var scrubbing by rememberSaveable(nowPlaying.track.id) { mutableStateOf(false) }
+    LaunchedEffect(nowPlaying.positionMs, scrubbing) {
+        if (!scrubbing) scrubPosition = nowPlaying.positionMs.toFloat()
+    }
+    val durationMs = nowPlaying.durationMs.coerceAtLeast(1L)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(nowPlaying.track.title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
                 Text(nowPlaying.track.artistName, style = MaterialTheme.typography.bodyLarge)
+                NowPlayingArtwork(nowPlaying)
                 Canvas(modifier = Modifier.fillMaxWidth().size(NavaSpacing.Xxl)) {
                     val barWidth = size.width / 11f
                     repeat(8) { index ->
@@ -182,6 +227,28 @@ private fun FullPlayer(nowPlaying: NowPlaying, onDismiss: () -> Unit, onToggle: 
                         drawRect(Color(0xFFFCA311), topLeft = androidx.compose.ui.geometry.Offset(barWidth * (index + 1), size.height - height), size = androidx.compose.ui.geometry.Size(barWidth * .5f, height))
                     }
                 }
+                Slider(
+                    value = scrubPosition.coerceIn(0f, durationMs.toFloat()),
+                    onValueChange = { value ->
+                        scrubbing = true
+                        scrubPosition = value
+                    },
+                    onValueChangeFinished = {
+                        onSeek(scrubPosition.toLong())
+                        scrubbing = false
+                    },
+                    valueRange = 0f..durationMs.toFloat(),
+                )
+                Text(
+                    stringResource(
+                        R.string.playback_position,
+                        playbackMinutes(scrubPosition.toLong()),
+                        playbackSeconds(scrubPosition.toLong()),
+                        playbackMinutes(durationMs),
+                        playbackSeconds(durationMs),
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
                     AssistChip(onClick = { onSpeed(0.75f) }, label = { Text("0.75×") })
                     AssistChip(onClick = { onSpeed(1f) }, label = { Text("1×") })
@@ -201,6 +268,52 @@ private fun FullPlayer(nowPlaying: NowPlaying, onDismiss: () -> Unit, onToggle: 
         },
         dismissButton = { Button(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
     )
+}
+
+private fun playbackMinutes(timeMs: Long): Long = timeMs / 60_000L
+
+private fun playbackSeconds(timeMs: Long): Long = (timeMs / 1_000L) % 60L
+
+@Composable
+private fun NowPlayingArtwork(nowPlaying: NowPlaying) {
+    val fallbackPaletteColor = MaterialTheme.colorScheme.primary
+    var bitmap by remember(nowPlaying.track.coverImageUrl) { mutableStateOf<Bitmap?>(null) }
+    var paletteColor by remember(nowPlaying.track.coverImageUrl) { mutableStateOf(fallbackPaletteColor) }
+    val rotation by animateFloatAsState(
+        targetValue = if (nowPlaying.playing) 360f else 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(NavaMotion.Slow * 24, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "cover rotation",
+    )
+    LaunchedEffect(bitmap) {
+        bitmap?.let { cover ->
+            paletteColor = withContext(Dispatchers.Default) {
+                Color(Palette.from(cover).generate().getVibrantColor(paletteColor.toArgb()))
+            }
+        }
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)
+            .clip(MaterialTheme.shapes.large)
+            .background(Brush.verticalGradient(listOf(paletteColor, MaterialTheme.colorScheme.surface))),
+        contentAlignment = Alignment.Center,
+    ) {
+        AsyncImage(
+            model = nowPlaying.track.coverImageUrl,
+            contentDescription = stringResource(R.string.now_playing_artwork),
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxSize()
+                .rotate(rotation),
+            onSuccess = { result ->
+                bitmap = (result.result.drawable as? BitmapDrawable)?.bitmap
+            },
+        )
+    }
 }
 
 @Composable private fun LibraryShell(modifier: Modifier, viewModel: LibraryViewModel = hiltViewModel()) {
