@@ -8,6 +8,11 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
@@ -156,15 +161,21 @@ fun NavaAppShell(
             else -> PlaceholderShell(navigationItems[selectedIndex].title, Modifier.padding(padding))
         }
     }
-    nowPlaying?.takeIf { playerExpanded }?.let { now ->
-        FullPlayer(
-            nowPlaying = now,
-            onDismiss = { playerExpanded = false },
-            onToggle = { if (now.playing) playbackViewModel.pause() else playbackViewModel.resume() },
-            onSeek = playbackViewModel::seekTo,
-            onSpeed = playbackViewModel::setSpeed,
-            onSleep = playbackViewModel::setSleepTimer,
-        )
+    nowPlaying?.let { now ->
+        AnimatedVisibility(
+            visible = playerExpanded,
+            enter = fadeIn(tween(NavaMotion.Standard)) + scaleIn(tween(NavaMotion.Standard)),
+            exit = fadeOut(tween(NavaMotion.Fast)) + scaleOut(tween(NavaMotion.Fast)),
+        ) {
+            FullPlayer(
+                nowPlaying = now,
+                onDismiss = { playerExpanded = false },
+                onToggle = { if (now.playing) playbackViewModel.pause() else playbackViewModel.resume() },
+                onSeek = playbackViewModel::seekTo,
+                onSpeed = playbackViewModel::setSpeed,
+                onSleep = playbackViewModel::setSleepTimer,
+            )
+        }
     }
     if (playbackError) {
         AlertDialog(
@@ -253,7 +264,10 @@ private fun FullPlayer(
                     AssistChip(onClick = { onSpeed(0.75f) }, label = { Text("0.75×") })
                     AssistChip(onClick = { onSpeed(1f) }, label = { Text("1×") })
                     AssistChip(onClick = { onSpeed(1.25f) }, label = { Text("1.25×") })
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
                     AssistChip(onClick = { onSpeed(1.5f) }, label = { Text("1.5×") })
+                    AssistChip(onClick = { onSpeed(2f) }, label = { Text("2×") })
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
                     AssistChip(onClick = { onSleep(15) }, label = { Text(stringResource(R.string.sleep_15)) })
