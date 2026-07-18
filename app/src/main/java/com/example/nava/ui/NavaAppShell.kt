@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -49,7 +50,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.RepeatMode
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.example.nava.R
 import com.example.nava.domain.auth.AuthSession
@@ -147,12 +153,20 @@ private fun MiniPlayer(nowPlaying: NowPlaying, onPause: () -> Unit, onOpen: () -
 
 @Composable
 private fun FullPlayer(nowPlaying: NowPlaying, onDismiss: () -> Unit, onPause: () -> Unit, onSpeed: (Float) -> Unit, onSleep: (Long) -> Unit) {
+    val pulse by animateFloatAsState(targetValue = if (nowPlaying.playing) 1f else .35f, animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "visualizer")
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(nowPlaying.track.title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
                 Text(nowPlaying.track.artistName, style = MaterialTheme.typography.bodyLarge)
+                Canvas(modifier = Modifier.fillMaxWidth().size(NavaSpacing.Xxl)) {
+                    val barWidth = size.width / 11f
+                    repeat(8) { index ->
+                        val height = size.height * (0.2f + ((index % 3) * .18f) + pulse * .22f)
+                        drawRect(Color(0xFFFCA311), topLeft = androidx.compose.ui.geometry.Offset(barWidth * (index + 1), size.height - height), size = androidx.compose.ui.geometry.Size(barWidth * .5f, height))
+                    }
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
                     AssistChip(onClick = { onSpeed(0.75f) }, label = { Text("0.75×") })
                     AssistChip(onClick = { onSpeed(1f) }, label = { Text("1×") })
