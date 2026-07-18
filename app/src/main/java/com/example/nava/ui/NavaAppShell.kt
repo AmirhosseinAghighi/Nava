@@ -57,6 +57,8 @@ import com.example.nava.ui.theme.NavaSpacing
 import com.example.nava.ui.home.HomeUiState
 import com.example.nava.ui.home.HomeViewModel
 import com.example.nava.ui.search.SearchViewModel
+import com.example.nava.ui.library.LibraryUiState
+import com.example.nava.ui.library.LibraryViewModel
 
 private data class NavItem(@StringRes val title: Int, val icon: ImageVector)
 
@@ -106,10 +108,26 @@ fun NavaAppShell(
         when (selectedIndex) {
             0 -> HomeShell(modifier = Modifier.padding(padding))
             1 -> SearchShell(modifier = Modifier.padding(padding))
+            3 -> LibraryShell(modifier = Modifier.padding(padding))
             4 -> ProfileShell(session, preferences, onEvent, Modifier.padding(padding))
             else -> PlaceholderShell(navigationItems[selectedIndex].title, Modifier.padding(padding))
         }
     }
+}
+
+@Composable private fun LibraryShell(modifier: Modifier, viewModel: LibraryViewModel = hiltViewModel()) {
+ val state by viewModel.state.collectAsState()
+ Column(modifier = modifier.fillMaxSize().padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
+  Text(stringResource(R.string.library_title), style = MaterialTheme.typography.headlineSmall)
+  when (val current = state) {
+   LibraryUiState.Loading -> CircularProgressIndicator()
+   LibraryUiState.Error -> { Text(stringResource(R.string.library_error)); Button(onClick = viewModel::reload) { Text(stringResource(R.string.retry)) } }
+   is LibraryUiState.Content -> {
+    Text(stringResource(R.string.liked_count, current.summary.likedCount), style = MaterialTheme.typography.titleMedium)
+    if (current.summary.playlists.isEmpty()) Text(stringResource(R.string.library_empty)) else LazyColumn(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) { items(current.summary.playlists, key = { it.id }) { playlist -> Card { Column(Modifier.padding(NavaSpacing.Md)) { Text(playlist.title, style = MaterialTheme.typography.titleMedium); playlist.description?.let { Text(it) } } } } }
+   }
+  }
+ }
 }
 
 @Composable
