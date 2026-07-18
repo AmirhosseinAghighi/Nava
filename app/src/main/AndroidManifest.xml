@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <application
         android:name=".NavaApplication"
@@ -35,6 +37,9 @@
                     android:host="auth" />
             </intent-filter>
         </activity>
+        <service android:name=".playback.NavaPlaybackService" android:foregroundServiceType="mediaPlayback" android:exported="true">
+            <intent-filter><action android:name="androidx.media3.session.MediaSessionService" /></intent-filter>
+        </service>
     </application>
 
 </manifest>

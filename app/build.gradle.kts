@@ -74,6 +74,8 @@ dependencies {
     implementation(libs.supabase.postgrest.kt)
     implementation(libs.supabase.storage.kt)
     implementation(libs.ktor.client.android)
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.session)
     ksp(libs.hilt.compiler)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
