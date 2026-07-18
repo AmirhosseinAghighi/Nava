@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -42,6 +43,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -82,6 +84,7 @@ fun NavaAppShell(
     onEvent: (NavaEvent) -> Unit,
 ) {
     var selectedIndex by rememberSaveable { mutableIntStateOf(0) }
+    var playerExpanded by rememberSaveable { mutableStateOf(false) }
     val playbackViewModel: PlaybackViewModel = hiltViewModel()
     val nowPlaying by playbackViewModel.nowPlaying.collectAsState()
     Scaffold(
@@ -100,7 +103,7 @@ fun NavaAppShell(
         },
         bottomBar = {
             Column {
-                nowPlaying?.let { MiniPlayer(it, playbackViewModel::pause) }
+                nowPlaying?.let { MiniPlayer(it, playbackViewModel::pause, onOpen = { playerExpanded = true }) }
                 NavigationBar {
                     navigationItems.forEachIndexed { index, item ->
                         NavigationBarItem(
@@ -122,11 +125,14 @@ fun NavaAppShell(
             else -> PlaceholderShell(navigationItems[selectedIndex].title, Modifier.padding(padding))
         }
     }
+    nowPlaying?.takeIf { playerExpanded }?.let { now ->
+        FullPlayer(now, onDismiss = { playerExpanded = false }, onPause = playbackViewModel::pause, onSpeed = playbackViewModel::setSpeed, onSleep = playbackViewModel::setSleepTimer)
+    }
 }
 
 @Composable
-private fun MiniPlayer(nowPlaying: NowPlaying, onPause: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth(), onClick = {}) {
+private fun MiniPlayer(nowPlaying: NowPlaying, onPause: () -> Unit, onOpen: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth(), onClick = onOpen) {
         Row(modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Md), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(nowPlaying.track.title, style = MaterialTheme.typography.titleMedium)
@@ -137,6 +143,31 @@ private fun MiniPlayer(nowPlaying: NowPlaying, onPause: () -> Unit) {
             }
         }
     }
+}
+
+@Composable
+private fun FullPlayer(nowPlaying: NowPlaying, onDismiss: () -> Unit, onPause: () -> Unit, onSpeed: (Float) -> Unit, onSleep: (Long) -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(nowPlaying.track.title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
+                Text(nowPlaying.track.artistName, style = MaterialTheme.typography.bodyLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                    AssistChip(onClick = { onSpeed(0.75f) }, label = { Text("0.75×") })
+                    AssistChip(onClick = { onSpeed(1f) }, label = { Text("1×") })
+                    AssistChip(onClick = { onSpeed(1.25f) }, label = { Text("1.25×") })
+                    AssistChip(onClick = { onSpeed(1.5f) }, label = { Text("1.5×") })
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                    AssistChip(onClick = { onSleep(15) }, label = { Text(stringResource(R.string.sleep_15)) })
+                    AssistChip(onClick = { onSleep(30) }, label = { Text(stringResource(R.string.sleep_30)) })
+                }
+            }
+        },
+        confirmButton = { Button(onClick = onPause) { Text(stringResource(R.string.pause_playback)) } },
+        dismissButton = { Button(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
+    )
 }
 
 @Composable private fun LibraryShell(modifier: Modifier, viewModel: LibraryViewModel = hiltViewModel()) {
