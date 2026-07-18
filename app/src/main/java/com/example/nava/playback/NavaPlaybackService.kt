@@ -1,7 +1,13 @@
 package com.example.nava.playback
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.Service
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import androidx.core.app.NotificationCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -16,6 +22,8 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.MediaStyleNotificationHelper
+import com.example.nava.R
 import java.io.File
 
 class NavaPlaybackService : MediaSessionService() {
@@ -75,6 +83,7 @@ class NavaPlaybackService : MediaSessionService() {
         val serviceResult = super.onStartCommand(intent, flags, startId)
         when (intent?.action) {
             ACTION_PLAY_URI -> intent.getStringExtra(EXTRA_URI)?.let { uri ->
+                startPlaybackForeground(intent.getStringExtra(EXTRA_TITLE))
                 player.setMediaItem(
                     MediaItem.Builder()
                         .setUri(uri)
@@ -106,7 +115,38 @@ class NavaPlaybackService : MediaSessionService() {
         session?.run { player.release(); release() }
         session = null
         cache.release()
+        stopForeground(Service.STOP_FOREGROUND_REMOVE)
         super.onDestroy()
+    }
+
+    private fun startPlaybackForeground(title: String?) {
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        notificationManager.createNotificationChannel(
+            NotificationChannel(
+                PLAYBACK_CHANNEL_ID,
+                getString(R.string.playback_channel_name),
+                NotificationManager.IMPORTANCE_LOW,
+            ),
+        )
+        val notification = NotificationCompat.Builder(this, PLAYBACK_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setContentTitle(title ?: getString(R.string.app_name))
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .apply {
+                session?.let { setStyle(MediaStyleNotificationHelper.MediaStyle(it)) }
+            }
+            .build()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                PLAYBACK_NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK,
+            )
+        } else {
+            startForeground(PLAYBACK_NOTIFICATION_ID, notification)
+        }
     }
 
     private fun publishPlaybackState(hasError: Boolean = false) {
@@ -141,5 +181,7 @@ class NavaPlaybackService : MediaSessionService() {
         const val EXTRA_SPEED = "speed"
         const val EXTRA_SLEEP_MS = "sleep_ms"
         private const val STATE_TICK_INTERVAL_MS = 1_000L
+        private const val PLAYBACK_CHANNEL_ID = "nava_playback"
+        private const val PLAYBACK_NOTIFICATION_ID = 1001
     }
 }

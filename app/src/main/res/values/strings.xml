@@ -43,6 +43,7 @@
     <string name="playback_position">%1$d:%2$02d / %3$d:%4$02d</string>
     <string name="now_playing_artwork">Now playing artwork</string>
     <string name="playback_unavailable">This track cannot be played right now. Check that its audio file is uploaded and try again.</string>
+    <string name="playback_channel_name">Music playback</string>
     <string name="sleep_15">Sleep 15 min</string><string name="sleep_30">Sleep 30 min</string><string name="close">Close</string>
     <string name="quick_liked">Liked songs</string>
     <string name="quick_recent">Recently played</string>
