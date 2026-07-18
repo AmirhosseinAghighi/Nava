@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Download
@@ -323,7 +324,7 @@ private fun NowPlayingArtwork(nowPlaying: NowPlaying) {
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(1f)
-            .clip(MaterialTheme.shapes.large)
+            .clip(CircleShape)
             .background(Brush.verticalGradient(listOf(paletteColor, MaterialTheme.colorScheme.surface))),
         contentAlignment = Alignment.Center,
     ) {
@@ -333,6 +334,7 @@ private fun NowPlayingArtwork(nowPlaying: NowPlaying) {
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .fillMaxSize()
+                .clip(CircleShape)
                 .rotate(rotation),
             onSuccess = { result ->
                 bitmap = (result.result.drawable as? BitmapDrawable)?.bitmap
