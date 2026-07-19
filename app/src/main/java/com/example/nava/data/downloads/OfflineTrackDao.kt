@@ -24,6 +24,9 @@ interface OfflineTrackDao {
     @Query("select * from offline_tracks order by downloadedAt desc")
     fun observeAll(): Flow<List<OfflineTrackEntity>>
 
+    @Query("select * from offline_tracks order by downloadedAt desc")
+    suspend fun getAll(): List<OfflineTrackEntity>
+
     @Query("select * from offline_tracks where trackId = :trackId limit 1")
     suspend fun find(trackId: String): OfflineTrackEntity?
 

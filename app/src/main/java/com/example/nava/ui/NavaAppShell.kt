@@ -51,6 +51,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -98,6 +99,7 @@ import com.example.nava.ui.search.SearchViewModel
 import com.example.nava.ui.library.LibraryUiState
 import com.example.nava.ui.library.LibraryViewModel
 import com.example.nava.ui.downloads.DownloadViewModel
+import com.example.nava.ui.downloads.DownloadsUiState
 import com.example.nava.ui.profile.ProfileViewModel
 import com.example.nava.playback.NowPlaying
 import com.example.nava.playback.PlaybackViewModel
@@ -130,7 +132,8 @@ fun NavaAppShell(
     val downloadViewModel: DownloadViewModel = hiltViewModel()
     val nowPlaying by playbackViewModel.nowPlaying.collectAsState()
     val playbackError by playbackViewModel.playbackError.collectAsState()
-    val premiumGateVisible by downloadViewModel.premiumGateVisible.collectAsState()
+    val downloadState by downloadViewModel.state.collectAsState()
+    val downloadError by downloadViewModel.downloadError.collectAsState()
     Scaffold(
         topBar = {
             TopAppBar(
@@ -172,11 +175,10 @@ fun NavaAppShell(
                 modifier = Modifier.padding(padding),
                 onPlay = playbackViewModel::play,
                 onQueue = { queueCandidate = it },
-                onDownload = { queueCandidate = it },
                 onShuffleSource = playbackViewModel::setShuffleSource,
             )
             1 -> SearchShell(modifier = Modifier.padding(padding))
-            2 -> DownloadsShell(Modifier.padding(padding), downloadViewModel)
+            2 -> DownloadsShell(Modifier.padding(padding), downloadState, downloadViewModel)
             3 -> LibraryShell(modifier = Modifier.padding(padding))
             4 -> ProfileShell(session, preferences, onEvent, Modifier.padding(padding))
             else -> PlaceholderShell(navigationItems[selectedIndex].title, Modifier.padding(padding))
@@ -212,6 +214,8 @@ fun NavaAppShell(
         )
     }
     queueCandidate?.let { track ->
+        val isDownloaded = track.id in downloadState.downloadedTrackIds
+        val isDownloading = track.id in downloadState.downloadingTrackIds
         AlertDialog(
             onDismissRequest = { queueCandidate = null },
             title = { Text(stringResource(R.string.song_actions)) },
@@ -226,17 +230,40 @@ fun NavaAppShell(
             },
             dismissButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-                    Button(onClick = { downloadViewModel.request(track); queueCandidate = null }) { Text(stringResource(R.string.download)) }
+                    Button(
+                        enabled = !isDownloaded && !isDownloading,
+                        onClick = {
+                            downloadViewModel.request(track)
+                            selectedIndex = 2
+                            queueCandidate = null
+                        },
+                    ) {
+                        Text(
+                            stringResource(
+                                when {
+                                    isDownloaded -> R.string.downloaded
+                                    isDownloading -> R.string.downloading
+                                    else -> R.string.download
+                                },
+                            ),
+                        )
+                    }
                     Button(onClick = { queueCandidate = null }) { Text(stringResource(R.string.close)) }
                 }
             },
         )
     }
-    if (premiumGateVisible) AlertDialog(
-        onDismissRequest = downloadViewModel::dismissPremiumGate,
-        text = { Text(stringResource(R.string.premium_download_required)) },
-        confirmButton = { Button(onClick = downloadViewModel::dismissPremiumGate) { Text(stringResource(R.string.close)) } },
-    )
+    downloadError?.let { error ->
+        AlertDialog(
+            onDismissRequest = downloadViewModel::dismissDownloadError,
+            text = { Text(error) },
+            confirmButton = {
+                Button(onClick = downloadViewModel::dismissDownloadError) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -464,7 +491,6 @@ private fun HomeShell(
     viewModel: HomeViewModel = hiltViewModel(),
     onPlay: (HomeTrack) -> Unit,
     onQueue: (HomeTrack) -> Unit,
-    onDownload: (HomeTrack) -> Unit,
     onShuffleSource: (List<HomeTrack>) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -540,12 +566,29 @@ private fun HomeError(onRetry: () -> Unit) {
 }
 
 @Composable
-private fun DownloadsShell(modifier: Modifier, viewModel: DownloadViewModel) {
-    val downloads by viewModel.downloads.collectAsState()
+private fun DownloadsShell(modifier: Modifier, state: DownloadsUiState, viewModel: DownloadViewModel) {
     Column(modifier = modifier.fillMaxSize().padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
         Text(stringResource(R.string.downloads), style = MaterialTheme.typography.headlineSmall)
-        if (downloads.isEmpty()) Text(stringResource(R.string.downloads_empty)) else LazyColumn(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-            items(downloads, key = { it.trackId }) { track ->
+        if (state.downloads.isEmpty() && state.activeDownloads.isEmpty()) {
+            Text(stringResource(R.string.downloads_empty))
+        } else LazyColumn(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+            items(state.activeDownloads, key = { "active-${it.trackId}" }) { track ->
+                Card {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Md),
+                        verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+                    ) {
+                        Text(track.title, style = MaterialTheme.typography.titleMedium)
+                        Text(track.artistName, style = MaterialTheme.typography.bodyMedium)
+                        LinearProgressIndicator(
+                            progress = { track.progressPercent / 100f },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text(stringResource(R.string.download_progress, track.progressPercent), style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
+            items(state.downloads, key = { it.trackId }) { track ->
                 val dismissState = rememberSwipeToDismissBoxState(confirmValueChange = { value ->
                     if (value != SwipeToDismissBoxValue.Settled) viewModel.remove(track)
                     value != SwipeToDismissBoxValue.Settled

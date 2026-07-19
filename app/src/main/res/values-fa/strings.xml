@@ -17,6 +17,9 @@
     <string name="search_error">جستجو در دسترس نیست. دوباره تلاش کنید.</string><string name="search_empty">موسیقی مطابقی پیدا نشد.</string>
     <string name="downloads">دانلودها</string>
     <string name="download">دانلود</string>
+    <string name="downloading">در حال دانلود</string>
+    <string name="downloaded">دانلود شده</string>
+    <string name="download_progress">در حال دانلود — %1$d٪</string>
     <string name="downloads_empty">هنوز دانلود آفلاینی ندارید. برای افزودن، روی آهنگ خانه نگه دارید.</string>
     <string name="remove_download">حذف</string>
     <string name="playlists">پلی‌لیست‌ها</string>
