@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.os.Bundle
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -25,7 +26,13 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.MediaStyleNotificationHelper
+import androidx.media3.session.CommandButton
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
 import com.example.nava.R
+import com.google.common.collect.ImmutableList
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
 import java.io.File
 
 class NavaPlaybackService : MediaSessionService() {
@@ -34,6 +41,36 @@ class NavaPlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
     private var currentTitle: String? = null
     private var currentArtist: String? = null
+    private val previousSessionCommand = SessionCommand(SESSION_COMMAND_PREVIOUS, Bundle.EMPTY)
+    private val nextSessionCommand = SessionCommand(SESSION_COMMAND_NEXT, Bundle.EMPTY)
+    private val mediaSessionCallback = object : MediaSession.Callback {
+        override fun onConnect(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+        ): MediaSession.ConnectionResult {
+            val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS
+                .buildUpon()
+                .add(previousSessionCommand)
+                .add(nextSessionCommand)
+                .build()
+            return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                .setAvailableSessionCommands(sessionCommands)
+                .build()
+        }
+
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            customCommand: SessionCommand,
+            args: Bundle,
+        ): ListenableFuture<SessionResult> {
+            when (customCommand.customAction) {
+                SESSION_COMMAND_PREVIOUS -> sendSkipBroadcast(ACTION_SKIP_PREVIOUS)
+                SESSION_COMMAND_NEXT -> sendSkipBroadcast(ACTION_SKIP_NEXT)
+            }
+            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+        }
+    }
     private val sleepHandler = Handler(Looper.getMainLooper())
     private val stateHandler = Handler(Looper.getMainLooper())
     private val sleepRunnable = Runnable { player.pause() }
@@ -82,7 +119,19 @@ class NavaPlaybackService : MediaSessionService() {
                 )
             }
         player.addListener(playerListener)
-        session = MediaSession.Builder(this, player).build()
+        val previousButton = CommandButton.Builder(CommandButton.ICON_PREVIOUS)
+            .setDisplayName(getString(R.string.previous_track))
+            .setSessionCommand(previousSessionCommand)
+            .build()
+        val nextButton = CommandButton.Builder(CommandButton.ICON_NEXT)
+            .setDisplayName(getString(R.string.next_track))
+            .setSessionCommand(nextSessionCommand)
+            .build()
+        session = MediaSession.Builder(this, player)
+            .setCallback(mediaSessionCallback)
+            .setMediaButtonPreferences(ImmutableList.of(previousButton, nextButton))
+            .setCustomLayout(ImmutableList.of(previousButton, nextButton))
+            .build()
     }
     override fun onStartCommand(intent: android.content.Intent?, flags: Int, startId: Int): Int {
         val serviceResult = super.onStartCommand(intent, flags, startId)
@@ -215,6 +264,8 @@ class NavaPlaybackService : MediaSessionService() {
         const val ACTION_PLAYBACK_STATE = "com.example.nava.playback.STATE_CHANGED"
         const val ACTION_SKIP_NEXT = "com.example.nava.playback.SKIP_NEXT"
         const val ACTION_SKIP_PREVIOUS = "com.example.nava.playback.SKIP_PREVIOUS"
+        const val SESSION_COMMAND_NEXT = "com.example.nava.playback.SESSION_NEXT"
+        const val SESSION_COMMAND_PREVIOUS = "com.example.nava.playback.SESSION_PREVIOUS"
         const val EXTRA_URI = "uri"
         const val EXTRA_TITLE = "title"
         const val EXTRA_ARTIST = "artist"
