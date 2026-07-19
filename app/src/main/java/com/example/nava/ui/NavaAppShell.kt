@@ -60,6 +60,9 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -94,6 +97,7 @@ import com.example.nava.ui.home.HomeViewModel
 import com.example.nava.ui.search.SearchViewModel
 import com.example.nava.ui.library.LibraryUiState
 import com.example.nava.ui.library.LibraryViewModel
+import com.example.nava.ui.downloads.DownloadViewModel
 import com.example.nava.playback.NowPlaying
 import com.example.nava.playback.PlaybackViewModel
 import com.example.nava.ui.theme.NavaMotion
@@ -122,8 +126,10 @@ fun NavaAppShell(
     var playerExpanded by rememberSaveable { mutableStateOf(false) }
     var queueCandidate by remember { mutableStateOf<HomeTrack?>(null) }
     val playbackViewModel: PlaybackViewModel = hiltViewModel()
+    val downloadViewModel: DownloadViewModel = hiltViewModel()
     val nowPlaying by playbackViewModel.nowPlaying.collectAsState()
     val playbackError by playbackViewModel.playbackError.collectAsState()
+    val premiumGateVisible by downloadViewModel.premiumGateVisible.collectAsState()
     Scaffold(
         topBar = {
             TopAppBar(
@@ -165,9 +171,11 @@ fun NavaAppShell(
                 modifier = Modifier.padding(padding),
                 onPlay = playbackViewModel::play,
                 onQueue = { queueCandidate = it },
+                onDownload = { queueCandidate = it },
                 onShuffleSource = playbackViewModel::setShuffleSource,
             )
             1 -> SearchShell(modifier = Modifier.padding(padding))
+            2 -> DownloadsShell(Modifier.padding(padding), downloadViewModel)
             3 -> LibraryShell(modifier = Modifier.padding(padding))
             4 -> ProfileShell(session, preferences, onEvent, Modifier.padding(padding))
             else -> PlaceholderShell(navigationItems[selectedIndex].title, Modifier.padding(padding))
@@ -216,12 +224,18 @@ fun NavaAppShell(
                 }
             },
             dismissButton = {
-                Button(onClick = { queueCandidate = null }) {
-                    Text(stringResource(R.string.close))
+                Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                    Button(onClick = { downloadViewModel.request(track); queueCandidate = null }) { Text(stringResource(R.string.download)) }
+                    Button(onClick = { queueCandidate = null }) { Text(stringResource(R.string.close)) }
                 }
             },
         )
     }
+    if (premiumGateVisible) AlertDialog(
+        onDismissRequest = downloadViewModel::dismissPremiumGate,
+        text = { Text(stringResource(R.string.premium_download_required)) },
+        confirmButton = { Button(onClick = downloadViewModel::dismissPremiumGate) { Text(stringResource(R.string.close)) } },
+    )
 }
 
 @Composable
@@ -449,6 +463,7 @@ private fun HomeShell(
     viewModel: HomeViewModel = hiltViewModel(),
     onPlay: (HomeTrack) -> Unit,
     onQueue: (HomeTrack) -> Unit,
+    onDownload: (HomeTrack) -> Unit,
     onShuffleSource: (List<HomeTrack>) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -520,6 +535,28 @@ private fun HomeError(onRetry: () -> Unit) {
     ) {
         Text(stringResource(R.string.home_load_error), style = MaterialTheme.typography.bodyLarge)
         Button(onClick = onRetry) { Text(stringResource(R.string.retry)) }
+    }
+}
+
+@Composable
+private fun DownloadsShell(modifier: Modifier, viewModel: DownloadViewModel) {
+    val downloads by viewModel.downloads.collectAsState()
+    Column(modifier = modifier.fillMaxSize().padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
+        Text(stringResource(R.string.downloads), style = MaterialTheme.typography.headlineSmall)
+        if (downloads.isEmpty()) Text(stringResource(R.string.downloads_empty)) else LazyColumn(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+            items(downloads, key = { it.trackId }) { track ->
+                val dismissState = rememberSwipeToDismissBoxState(confirmValueChange = { value ->
+                    if (value != SwipeToDismissBoxValue.Settled) viewModel.remove(track)
+                    value != SwipeToDismissBoxValue.Settled
+                })
+                SwipeToDismissBox(state = dismissState, backgroundContent = { Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.errorContainer) {} }) {
+                    Card { Row(Modifier.fillMaxWidth().padding(NavaSpacing.Md), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) { Text(track.title, style = MaterialTheme.typography.titleMedium); Text(track.artistName) }
+                        Button(onClick = { viewModel.remove(track) }) { Text(stringResource(R.string.remove_download)) }
+                    } }
+                }
+            }
+        }
     }
 }
 

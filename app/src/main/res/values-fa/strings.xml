@@ -16,6 +16,9 @@
     <string name="filter_all">همه</string><string name="filter_english">انگلیسی</string><string name="filter_persian">فارسی</string>
     <string name="search_error">جستجو در دسترس نیست. دوباره تلاش کنید.</string><string name="search_empty">موسیقی مطابقی پیدا نشد.</string>
     <string name="downloads">دانلودها</string>
+    <string name="download">دانلود</string>
+    <string name="downloads_empty">هنوز دانلود آفلاینی ندارید. برای افزودن، روی آهنگ خانه نگه دارید.</string>
+    <string name="remove_download">حذف</string>
     <string name="playlists">پلی‌لیست‌ها</string>
     <string name="library_title">کتابخانه شما</string><string name="liked_count">آهنگ‌های پسندیده: %1$d</string><string name="library_empty">برای ساخت کتابخانه، پلی‌لیست بسازید یا آهنگی را بپسندید.</string><string name="library_error">بارگیری کتابخانه انجام نشد.</string>
     <string name="profile">پروفایل</string>
@@ -31,6 +34,7 @@
     <string name="language_persian">فارسی</string>
     <string name="sign_out">خروج</string>
     <string name="premium">ویژه</string>
+    <string name="premium_download_required">دانلود آفلاین یک قابلیت ویژه است. برای دانلود موسیقی حسابتان را ارتقا دهید.</string>
     <string name="standard">استاندارد</string>
     <string name="account">حساب کاربری</string>
     <string name="user_avatar">آواتار کاربر</string>

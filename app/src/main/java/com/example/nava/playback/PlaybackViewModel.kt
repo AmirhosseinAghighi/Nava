@@ -9,6 +9,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.nava.domain.catalog.HomeTrack
+import com.example.nava.data.downloads.OfflineDownloadRepository
+import java.io.File
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
@@ -31,6 +33,7 @@ data class NowPlaying(
 class PlaybackViewModel @Inject constructor(
     application: Application,
     private val resolver: SignedAudioUrlResolver,
+    private val offlineDownloads: OfflineDownloadRepository,
     private val supabase: SupabaseClient,
 ) : AndroidViewModel(application) {
     private val _nowPlaying = MutableStateFlow<NowPlaying?>(null)
@@ -102,7 +105,15 @@ class PlaybackViewModel @Inject constructor(
     }
 
     private suspend fun playTrack(track: HomeTrack): Boolean {
-        runCatching { resolver.resolve(track.audioUrl) }
+        runCatching {
+            offlineDownloads.find(track.id)
+                ?.audioPath
+                ?.let(::File)
+                ?.takeIf(File::exists)
+                ?.toURI()
+                ?.toString()
+                ?: resolver.resolve(track.audioUrl)
+        }
             .onSuccess { url ->
                 _playbackError.value = false
                 getApplication<Application>().startForegroundService(Intent(getApplication(), NavaPlaybackService::class.java).apply {

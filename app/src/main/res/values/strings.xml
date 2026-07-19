@@ -16,6 +16,9 @@
     <string name="filter_all">All</string><string name="filter_english">English</string><string name="filter_persian">Persian</string>
     <string name="search_error">Search is unavailable. Try again.</string><string name="search_empty">No matching music found.</string>
     <string name="downloads">Downloads</string>
+    <string name="download">Download</string>
+    <string name="downloads_empty">No offline downloads yet. Long-press a Home song to add one.</string>
+    <string name="remove_download">Remove</string>
     <string name="playlists">Playlists</string>
     <string name="library_title">Your library</string><string name="liked_count">Liked songs: %1$d</string><string name="library_empty">Create a playlist or like a track to build your library.</string><string name="library_error">Your library could not be loaded.</string>
     <string name="profile">Profile</string>
@@ -31,6 +34,7 @@
     <string name="language_persian">Persian</string>
     <string name="sign_out">Sign out</string>
     <string name="premium">Premium</string>
+    <string name="premium_download_required">Offline downloads are a Premium feature. Upgrade your account to download music.</string>
     <string name="standard">Standard</string>
     <string name="account">Account</string>
     <string name="user_avatar">User avatar</string>
