@@ -17,6 +17,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -117,6 +118,7 @@ fun NavaAppShell(
 ) {
     var selectedIndex by rememberSaveable { mutableIntStateOf(0) }
     var playerExpanded by rememberSaveable { mutableStateOf(false) }
+    var queueCandidate by remember { mutableStateOf<HomeTrack?>(null) }
     val playbackViewModel: PlaybackViewModel = hiltViewModel()
     val nowPlaying by playbackViewModel.nowPlaying.collectAsState()
     val playbackError by playbackViewModel.playbackError.collectAsState()
@@ -157,7 +159,12 @@ fun NavaAppShell(
         },
     ) { padding ->
         when (selectedIndex) {
-            0 -> HomeShell(modifier = Modifier.padding(padding), onPlay = playbackViewModel::play)
+            0 -> HomeShell(
+                modifier = Modifier.padding(padding),
+                onPlay = playbackViewModel::play,
+                onQueue = { queueCandidate = it },
+                onShuffleSource = playbackViewModel::setShuffleSource,
+            )
             1 -> SearchShell(modifier = Modifier.padding(padding))
             3 -> LibraryShell(modifier = Modifier.padding(padding))
             4 -> ProfileShell(session, preferences, onEvent, Modifier.padding(padding))
@@ -186,6 +193,26 @@ fun NavaAppShell(
             text = { Text(stringResource(R.string.playback_unavailable)) },
             confirmButton = {
                 Button(onClick = playbackViewModel::clearPlaybackError) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+        )
+    }
+    queueCandidate?.let { track ->
+        AlertDialog(
+            onDismissRequest = { queueCandidate = null },
+            title = { Text(stringResource(R.string.song_actions)) },
+            text = { Text("${track.title}\n${track.artistName}") },
+            confirmButton = {
+                Button(onClick = {
+                    playbackViewModel.addToQueue(track)
+                    queueCandidate = null
+                }) {
+                    Text(stringResource(R.string.add_to_queue))
+                }
+            },
+            dismissButton = {
+                Button(onClick = { queueCandidate = null }) {
                     Text(stringResource(R.string.close))
                 }
             },
@@ -392,8 +419,18 @@ private fun HomeShell(
     modifier: Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
     onPlay: (HomeTrack) -> Unit,
+    onQueue: (HomeTrack) -> Unit,
+    onShuffleSource: (List<HomeTrack>) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
+    (state as? HomeUiState.Content)?.feed?.let { feed ->
+        LaunchedEffect(feed) {
+            onShuffleSource(
+                (feed.featured + feed.trending + feed.newest + feed.global + feed.local)
+                    .distinctBy(HomeTrack::id),
+            )
+        }
+    }
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xl),
@@ -402,18 +439,22 @@ private fun HomeShell(
         when (val current = state) {
             HomeUiState.Loading -> item { HomeLoading() }
             HomeUiState.Error -> item { HomeError(onRetry = viewModel::reload) }
-            is HomeUiState.Content -> homeContent(current, onPlay)
+            is HomeUiState.Content -> homeContent(current, onPlay, onQueue)
         }
     }
 }
 
-private fun androidx.compose.foundation.lazy.LazyListScope.homeContent(state: HomeUiState.Content, onPlay: (HomeTrack) -> Unit) {
+private fun androidx.compose.foundation.lazy.LazyListScope.homeContent(
+    state: HomeUiState.Content,
+    onPlay: (HomeTrack) -> Unit,
+    onQueue: (HomeTrack) -> Unit,
+) {
     item {
         LazyRow(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NavaSpacing.Lg),
             horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
         ) {
-            items(state.feed.featured, key = HomeTrack::id) { FeaturedCard(it, onPlay) }
+            items(state.feed.featured, key = HomeTrack::id) { FeaturedCard(it, onPlay, onQueue) }
         }
     }
     item {
@@ -427,10 +468,10 @@ private fun androidx.compose.foundation.lazy.LazyListScope.homeContent(state: Ho
             item { QuickAction(R.string.quick_artists) }
         }
     }
-    item { DiscoverySection(R.string.home_trending, state.feed.trending, onPlay) }
-    item { DiscoverySection(R.string.home_newest, state.feed.newest, onPlay) }
-    item { DiscoverySection(R.string.home_global, state.feed.global, onPlay) }
-    item { DiscoverySection(R.string.home_local, state.feed.local, onPlay) }
+    item { DiscoverySection(R.string.home_trending, state.feed.trending, onPlay, onQueue) }
+    item { DiscoverySection(R.string.home_newest, state.feed.newest, onPlay, onQueue) }
+    item { DiscoverySection(R.string.home_global, state.feed.global, onPlay, onQueue) }
+    item { DiscoverySection(R.string.home_local, state.feed.local, onPlay, onQueue) }
 }
 
 @Composable
@@ -454,10 +495,15 @@ private fun HomeError(onRetry: () -> Unit) {
 }
 
 @Composable
-private fun FeaturedCard(track: HomeTrack, onPlay: (HomeTrack) -> Unit) {
+private fun FeaturedCard(
+    track: HomeTrack,
+    onPlay: (HomeTrack) -> Unit,
+    onQueue: (HomeTrack) -> Unit,
+) {
     Card(
-        onClick = { onPlay(track) },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = { onPlay(track) }, onLongClick = { onQueue(track) }),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column(modifier = Modifier.padding(NavaSpacing.Xl), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
@@ -468,7 +514,12 @@ private fun FeaturedCard(track: HomeTrack, onPlay: (HomeTrack) -> Unit) {
 }
 
 @Composable
-private fun DiscoverySection(@StringRes title: Int, tracks: List<HomeTrack>, onPlay: (HomeTrack) -> Unit) {
+private fun DiscoverySection(
+    @StringRes title: Int,
+    tracks: List<HomeTrack>,
+    onPlay: (HomeTrack) -> Unit,
+    onQueue: (HomeTrack) -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
         Text(stringResource(title), modifier = Modifier.padding(horizontal = NavaSpacing.Lg), style = MaterialTheme.typography.titleLarge)
         LazyRow(
@@ -476,7 +527,13 @@ private fun DiscoverySection(@StringRes title: Int, tracks: List<HomeTrack>, onP
             horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
         ) {
             items(tracks, key = HomeTrack::id) { track ->
-                Card(onClick = { onPlay(track) }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                Card(
+                    modifier = Modifier.combinedClickable(
+                        onClick = { onPlay(track) },
+                        onLongClick = { onQueue(track) },
+                    ),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                ) {
                     Column(modifier = Modifier.padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
                         Text(track.title, style = MaterialTheme.typography.titleMedium)
                         Text(track.artistName, style = MaterialTheme.typography.bodyMedium)

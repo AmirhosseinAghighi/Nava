@@ -37,6 +37,10 @@ class PlaybackViewModel @Inject constructor(
     val nowPlaying: StateFlow<NowPlaying?> = _nowPlaying.asStateFlow()
     private val _playbackError = MutableStateFlow(false)
     val playbackError: StateFlow<Boolean> = _playbackError.asStateFlow()
+    private val _userQueue = MutableStateFlow<List<HomeTrack>>(emptyList())
+    val userQueue: StateFlow<List<HomeTrack>> = _userQueue.asStateFlow()
+    private var shuffleSource: List<HomeTrack> = emptyList()
+    private var isAdvancing = false
     private var lastRecordedProgressMs = 0L
     private val playbackStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -51,7 +55,10 @@ class PlaybackViewModel @Inject constructor(
                 durationMs = intent.getLongExtra(NavaPlaybackService.EXTRA_DURATION_MS, current.durationMs),
             )
             when {
-                playbackState == androidx.media3.common.Player.STATE_ENDED -> recordEvent(current.track.id, "completed", positionMs)
+                playbackState == androidx.media3.common.Player.STATE_ENDED -> {
+                    recordEvent(current.track.id, "completed", positionMs)
+                    advanceAfterCompletion(current)
+                }
                 positionMs - lastRecordedProgressMs >= PROGRESS_REPORT_INTERVAL_MS -> {
                     lastRecordedProgressMs = positionMs
                     recordEvent(current.track.id, "progress", positionMs)
@@ -69,7 +76,17 @@ class PlaybackViewModel @Inject constructor(
         )
     }
 
-    fun play(track: HomeTrack) = viewModelScope.launch {
+    fun play(track: HomeTrack) = viewModelScope.launch { playTrack(track) }
+
+    fun addToQueue(track: HomeTrack) {
+        _userQueue.value = _userQueue.value + track
+    }
+
+    fun setShuffleSource(tracks: List<HomeTrack>) {
+        shuffleSource = tracks.distinctBy(HomeTrack::id)
+    }
+
+    private suspend fun playTrack(track: HomeTrack): Boolean {
         runCatching { resolver.resolve(track.audioUrl) }
             .onSuccess { url ->
                 _playbackError.value = false
@@ -83,8 +100,10 @@ class PlaybackViewModel @Inject constructor(
                 _nowPlaying.value = NowPlaying(track, true)
                 lastRecordedProgressMs = 0L
                 recordEvent(track.id, "started", 0L)
+                return true
             }
             .onFailure { _playbackError.value = true }
+        return false
     }
 
     fun pause() {
@@ -117,6 +136,26 @@ class PlaybackViewModel @Inject constructor(
                     put("p_position_seconds", (positionMs / 1_000L).toInt())
                 },
             )
+        }
+    }
+
+    private fun advanceAfterCompletion(current: NowPlaying) {
+        if (isAdvancing) return
+        val queuedTrack = _userQueue.value.firstOrNull()
+        val nextTrack = queuedTrack ?: shuffleSource
+            .filterNot { it.id == current.track.id }
+            .shuffled()
+            .firstOrNull()
+            ?: return
+        isAdvancing = true
+        viewModelScope.launch {
+            try {
+                if (playTrack(nextTrack) && queuedTrack != null) {
+                    _userQueue.value = _userQueue.value.drop(1)
+                }
+            } finally {
+                isAdvancing = false
+            }
         }
     }
 

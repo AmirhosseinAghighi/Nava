@@ -45,6 +45,8 @@
     <string name="playback_unavailable">This track cannot be played right now. Check that its audio file is uploaded and try again.</string>
     <string name="playback_channel_name">Music playback</string>
     <string name="sleep_15">Sleep 15 min</string><string name="sleep_30">Sleep 30 min</string><string name="close">Close</string>
+    <string name="song_actions">Song actions</string>
+    <string name="add_to_queue">Add to queue</string>
     <string name="quick_liked">Liked songs</string>
     <string name="quick_recent">Recently played</string>
     <string name="quick_playlists">My playlists</string>
