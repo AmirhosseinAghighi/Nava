@@ -98,6 +98,7 @@ import com.example.nava.ui.search.SearchViewModel
 import com.example.nava.ui.library.LibraryUiState
 import com.example.nava.ui.library.LibraryViewModel
 import com.example.nava.ui.downloads.DownloadViewModel
+import com.example.nava.ui.profile.ProfileViewModel
 import com.example.nava.playback.NowPlaying
 import com.example.nava.playback.PlaybackViewModel
 import com.example.nava.ui.theme.NavaMotion
@@ -630,15 +631,18 @@ private fun ProfileShell(
     preferences: UserPreferences,
     onEvent: (NavaEvent) -> Unit,
     modifier: Modifier,
+    viewModel: ProfileViewModel = hiltViewModel(),
 ) {
+    val premium by viewModel.premium.collectAsState()
     Column(modifier = modifier.fillMaxSize().padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Lg)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
             Icon(Icons.Outlined.AccountCircle, contentDescription = stringResource(R.string.user_avatar), modifier = Modifier.size(NavaSpacing.Xxl))
             Column {
                 Text(session.email.substringBefore('@'), style = MaterialTheme.typography.titleLarge)
-                Text(stringResource(R.string.standard), style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(if (premium) R.string.premium else R.string.standard), style = MaterialTheme.typography.bodyMedium)
             }
         }
+        if (!premium) Button(onClick = viewModel::upgrade) { Text(stringResource(R.string.upgrade_demo)) }
         Text(stringResource(R.string.settings), style = MaterialTheme.typography.titleLarge)
         SettingButtons(
             title = R.string.theme,

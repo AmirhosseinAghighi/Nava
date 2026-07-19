@@ -34,6 +34,7 @@
     <string name="language_persian">Persian</string>
     <string name="sign_out">Sign out</string>
     <string name="premium">Premium</string>
+    <string name="upgrade_demo">Enable Premium demo</string>
     <string name="premium_download_required">Offline downloads are a Premium feature. Upgrade your account to download music.</string>
     <string name="standard">Standard</string>
     <string name="account">Account</string>

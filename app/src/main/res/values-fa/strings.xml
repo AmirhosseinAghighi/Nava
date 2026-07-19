@@ -34,6 +34,7 @@
     <string name="language_persian">فارسی</string>
     <string name="sign_out">خروج</string>
     <string name="premium">ویژه</string>
+    <string name="upgrade_demo">فعال‌سازی نسخه آزمایشی ویژه</string>
     <string name="premium_download_required">دانلود آفلاین یک قابلیت ویژه است. برای دانلود موسیقی حسابتان را ارتقا دهید.</string>
     <string name="standard">استاندارد</string>
     <string name="account">حساب کاربری</string>
