@@ -3,11 +3,11 @@ package com.example.nava.ui
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import androidx.annotation.StringRes
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -95,6 +95,7 @@ import com.example.nava.playback.NowPlaying
 import com.example.nava.playback.PlaybackViewModel
 import com.example.nava.ui.theme.NavaMotion
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 
 private data class NavItem(@StringRes val title: Int, val icon: ImageVector)
@@ -303,22 +304,19 @@ private fun NowPlayingArtwork(nowPlaying: NowPlaying) {
     val fallbackPaletteColor = MaterialTheme.colorScheme.primary
     var bitmap by remember(nowPlaying.track.coverImageUrl) { mutableStateOf<Bitmap?>(null) }
     var paletteColor by remember(nowPlaying.track.coverImageUrl) { mutableStateOf(fallbackPaletteColor) }
-    var rotationReady by remember(nowPlaying.track.id) { mutableStateOf(false) }
-    LaunchedEffect(nowPlaying.playing) {
-        if (nowPlaying.playing) rotationReady = true
-    }
-    val rotation by animateFloatAsState(
-        targetValue = if (nowPlaying.playing && rotationReady) 360f else 0f,
-        animationSpec = if (nowPlaying.playing) {
-            infiniteRepeatable(
-                animation = tween(NavaMotion.Slow * 24, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart,
+    val coverRotation = remember(nowPlaying.track.id) { Animatable(0f) }
+    LaunchedEffect(nowPlaying.track.id, nowPlaying.playing) {
+        if (!nowPlaying.playing) {
+            coverRotation.stop()
+            return@LaunchedEffect
+        }
+        while (isActive) {
+            coverRotation.animateTo(
+                targetValue = coverRotation.value + 360f,
+                animationSpec = tween(NavaMotion.Slow * 24, easing = LinearEasing),
             )
-        } else {
-            snap()
-        },
-        label = "cover rotation",
-    )
+        }
+    }
     LaunchedEffect(bitmap) {
         bitmap?.let { cover ->
             paletteColor = withContext(Dispatchers.Default) {
@@ -344,7 +342,7 @@ private fun NowPlayingArtwork(nowPlaying: NowPlaying) {
             modifier = Modifier
                 .fillMaxSize()
                 .clip(CircleShape)
-                .rotate(rotation),
+                .rotate(coverRotation.value),
             onSuccess = { result ->
                 bitmap = (result.result.drawable as? BitmapDrawable)?.bitmap
             },
