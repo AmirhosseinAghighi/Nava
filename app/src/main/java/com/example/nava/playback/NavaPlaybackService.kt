@@ -2,7 +2,9 @@ package com.example.nava.playback
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
+import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Handler
@@ -30,6 +32,8 @@ class NavaPlaybackService : MediaSessionService() {
     private lateinit var player: ExoPlayer
     private lateinit var cache: SimpleCache
     private var session: MediaSession? = null
+    private var currentTitle: String? = null
+    private var currentArtist: String? = null
     private val sleepHandler = Handler(Looper.getMainLooper())
     private val stateHandler = Handler(Looper.getMainLooper())
     private val sleepRunnable = Runnable { player.pause() }
@@ -42,6 +46,7 @@ class NavaPlaybackService : MediaSessionService() {
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             publishPlaybackState()
+            updatePlaybackNotification()
             stateHandler.removeCallbacks(stateTicker)
             if (isPlaying) stateHandler.post(stateTicker)
         }
@@ -84,6 +89,8 @@ class NavaPlaybackService : MediaSessionService() {
         when (intent?.action) {
             ACTION_PLAY_URI -> intent.getStringExtra(EXTRA_URI)?.let { uri ->
                 startPlaybackForeground(intent.getStringExtra(EXTRA_TITLE))
+                currentTitle = intent.getStringExtra(EXTRA_TITLE)
+                currentArtist = intent.getStringExtra(EXTRA_ARTIST)
                 player.setMediaItem(
                     MediaItem.Builder()
                         .setUri(uri)
@@ -104,6 +111,8 @@ class NavaPlaybackService : MediaSessionService() {
             ACTION_SEEK -> player.seekTo(intent.getLongExtra(EXTRA_POSITION_MS, player.currentPosition))
             ACTION_SPEED -> player.setPlaybackSpeed(intent.getFloatExtra(EXTRA_SPEED, 1f))
             ACTION_SLEEP -> { sleepHandler.removeCallbacks(sleepRunnable); sleepHandler.postDelayed(sleepRunnable, intent.getLongExtra(EXTRA_SLEEP_MS, 0)) }
+            ACTION_NEXT -> sendSkipBroadcast(ACTION_SKIP_NEXT)
+            ACTION_PREVIOUS -> sendSkipBroadcast(ACTION_SKIP_PREVIOUS)
         }
         return serviceResult
     }
@@ -128,16 +137,8 @@ class NavaPlaybackService : MediaSessionService() {
                 NotificationManager.IMPORTANCE_LOW,
             ),
         )
-        val notification = NotificationCompat.Builder(this, PLAYBACK_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_media_play)
-            .setContentTitle(title ?: getString(R.string.app_name))
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .apply {
-                session?.let { setStyle(MediaStyleNotificationHelper.MediaStyle(it)) }
-            }
-            .build()
+        currentTitle = title
+        val notification = buildPlaybackNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 PLAYBACK_NOTIFICATION_ID,
@@ -147,6 +148,47 @@ class NavaPlaybackService : MediaSessionService() {
         } else {
             startForeground(PLAYBACK_NOTIFICATION_ID, notification)
         }
+    }
+
+    private fun updatePlaybackNotification() {
+        if (!::player.isInitialized) return
+        getSystemService(NotificationManager::class.java)
+            .notify(PLAYBACK_NOTIFICATION_ID, buildPlaybackNotification())
+    }
+
+    private fun buildPlaybackNotification() = NotificationCompat.Builder(this, PLAYBACK_CHANNEL_ID)
+        .setSmallIcon(if (player.isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
+        .setContentTitle(currentTitle ?: getString(R.string.app_name))
+        .setContentText(currentArtist)
+        .setCategory(NotificationCompat.CATEGORY_SERVICE)
+        .setOngoing(true)
+        .setOnlyAlertOnce(true)
+        .addAction(android.R.drawable.ic_media_previous, getString(R.string.previous_track), controlIntent(ACTION_PREVIOUS, 1))
+        .addAction(
+            if (player.isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
+            getString(if (player.isPlaying) R.string.pause_playback else R.string.resume_playback),
+            controlIntent(if (player.isPlaying) ACTION_PAUSE else ACTION_RESUME, 2),
+        )
+        .addAction(android.R.drawable.ic_media_next, getString(R.string.next_track), controlIntent(ACTION_NEXT, 3))
+        .apply {
+            session?.let {
+                setStyle(
+                    MediaStyleNotificationHelper.MediaStyle(it)
+                        .setShowActionsInCompactView(0, 1, 2),
+                )
+            }
+        }
+        .build()
+
+    private fun controlIntent(action: String, requestCode: Int): PendingIntent = PendingIntent.getService(
+        this,
+        requestCode,
+        Intent(this, NavaPlaybackService::class.java).setAction(action),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+
+    private fun sendSkipBroadcast(action: String) {
+        sendBroadcast(Intent(action).setPackage(packageName))
     }
 
     private fun publishPlaybackState(hasError: Boolean = false) {
@@ -168,7 +210,11 @@ class NavaPlaybackService : MediaSessionService() {
         const val ACTION_SEEK = "com.example.nava.playback.SEEK"
         const val ACTION_SPEED = "com.example.nava.playback.SPEED"
         const val ACTION_SLEEP = "com.example.nava.playback.SLEEP"
+        const val ACTION_NEXT = "com.example.nava.playback.NEXT"
+        const val ACTION_PREVIOUS = "com.example.nava.playback.PREVIOUS"
         const val ACTION_PLAYBACK_STATE = "com.example.nava.playback.STATE_CHANGED"
+        const val ACTION_SKIP_NEXT = "com.example.nava.playback.SKIP_NEXT"
+        const val ACTION_SKIP_PREVIOUS = "com.example.nava.playback.SKIP_PREVIOUS"
         const val EXTRA_URI = "uri"
         const val EXTRA_TITLE = "title"
         const val EXTRA_ARTIST = "artist"

@@ -40,11 +40,19 @@ class PlaybackViewModel @Inject constructor(
     private val _userQueue = MutableStateFlow<List<HomeTrack>>(emptyList())
     val userQueue: StateFlow<List<HomeTrack>> = _userQueue.asStateFlow()
     private var shuffleSource: List<HomeTrack> = emptyList()
+    private val playbackHistory = mutableListOf<HomeTrack>()
     private var isAdvancing = false
     private var lastRecordedProgressMs = 0L
     private val playbackStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action != NavaPlaybackService.ACTION_PLAYBACK_STATE) return
+            when (intent.action) {
+                NavaPlaybackService.ACTION_SKIP_NEXT -> skipToNext()
+                NavaPlaybackService.ACTION_SKIP_PREVIOUS -> skipToPrevious()
+                NavaPlaybackService.ACTION_PLAYBACK_STATE -> updatePlaybackState(intent)
+            }
+        }
+
+        private fun updatePlaybackState(intent: Intent) {
             if (intent.getBooleanExtra(NavaPlaybackService.EXTRA_ERROR, false)) _playbackError.value = true
             val current = _nowPlaying.value ?: return
             val positionMs = intent.getLongExtra(NavaPlaybackService.EXTRA_POSITION_MS, current.positionMs)
@@ -71,12 +79,19 @@ class PlaybackViewModel @Inject constructor(
         ContextCompat.registerReceiver(
             getApplication(),
             playbackStateReceiver,
-            IntentFilter(NavaPlaybackService.ACTION_PLAYBACK_STATE),
+            IntentFilter().apply {
+                addAction(NavaPlaybackService.ACTION_PLAYBACK_STATE)
+                addAction(NavaPlaybackService.ACTION_SKIP_NEXT)
+                addAction(NavaPlaybackService.ACTION_SKIP_PREVIOUS)
+            },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
     }
 
-    fun play(track: HomeTrack) = viewModelScope.launch { playTrack(track) }
+    fun play(track: HomeTrack) = viewModelScope.launch {
+        rememberCurrentTrack()
+        playTrack(track)
+    }
 
     fun addToQueue(track: HomeTrack) {
         _userQueue.value = _userQueue.value + track
@@ -116,6 +131,20 @@ class PlaybackViewModel @Inject constructor(
         _nowPlaying.value = _nowPlaying.value?.copy(playing = true)
     }
 
+    fun skipToNext() {
+        _nowPlaying.value?.let(::advanceToNext)
+    }
+
+    fun skipToPrevious() {
+        val current = _nowPlaying.value ?: return
+        if (current.positionMs > RESTART_POSITION_MS) {
+            seekTo(0L)
+            return
+        }
+        val previousTrack = playbackHistory.removeLastOrNull() ?: return
+        viewModelScope.launch { playTrack(previousTrack) }
+    }
+
     fun seekTo(positionMs: Long) = send(NavaPlaybackService.ACTION_SEEK, NavaPlaybackService.EXTRA_POSITION_MS to positionMs)
     fun setSpeed(speed: Float) = send(NavaPlaybackService.ACTION_SPEED, NavaPlaybackService.EXTRA_SPEED to speed)
     fun setSleepTimer(minutes: Long) = send(NavaPlaybackService.ACTION_SLEEP, NavaPlaybackService.EXTRA_SLEEP_MS to minutes * 60_000L)
@@ -140,6 +169,10 @@ class PlaybackViewModel @Inject constructor(
     }
 
     private fun advanceAfterCompletion(current: NowPlaying) {
+        advanceToNext(current)
+    }
+
+    private fun advanceToNext(current: NowPlaying) {
         if (isAdvancing) return
         val queuedTrack = _userQueue.value.firstOrNull()
         val nextTrack = queuedTrack ?: shuffleSource
@@ -147,6 +180,7 @@ class PlaybackViewModel @Inject constructor(
             .shuffled()
             .firstOrNull()
             ?: return
+        rememberCurrentTrack()
         isAdvancing = true
         viewModelScope.launch {
             try {
@@ -168,5 +202,14 @@ class PlaybackViewModel @Inject constructor(
 
     private companion object {
         const val PROGRESS_REPORT_INTERVAL_MS = 30_000L
+        const val RESTART_POSITION_MS = 5_000L
+    }
+
+    private fun rememberCurrentTrack() {
+        _nowPlaying.value?.track?.let { currentTrack ->
+            if (playbackHistory.lastOrNull()?.id != currentTrack.id) {
+                playbackHistory += currentTrack
+            }
+        }
     }
 }

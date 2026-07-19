@@ -40,6 +40,8 @@
     <string name="notification">اعلان‌ها</string>
     <string name="pause_playback">توقف پخش</string>
     <string name="resume_playback">ادامه پخش</string>
+    <string name="previous_track">آهنگ قبلی</string>
+    <string name="next_track">آهنگ بعدی</string>
     <string name="playback_position">%1$d:%2$02d / %3$d:%4$02d</string>
     <string name="now_playing_artwork">تصویر در حال پخش</string>
     <string name="playback_unavailable">این آهنگ فعلاً قابل پخش نیست. بارگذاری فایل صوتی آن را بررسی کنید و دوباره تلاش کنید.</string>

@@ -40,6 +40,8 @@ import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.SkipNext
+import androidx.compose.material.icons.outlined.SkipPrevious
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -184,6 +186,8 @@ fun NavaAppShell(
                 onSeek = playbackViewModel::seekTo,
                 onSpeed = playbackViewModel::setSpeed,
                 onSleep = playbackViewModel::setSleepTimer,
+                onPrevious = playbackViewModel::skipToPrevious,
+                onNext = playbackViewModel::skipToNext,
             )
         }
     }
@@ -254,6 +258,8 @@ private fun FullPlayer(
     onSeek: (Long) -> Unit,
     onSpeed: (Float) -> Unit,
     onSleep: (Long) -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
 ) {
     val pulse by animateFloatAsState(targetValue = if (nowPlaying.playing) 1f else .35f, animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "visualizer")
     var scrubPosition by rememberSaveable(nowPlaying.track.id) { mutableStateOf(nowPlaying.positionMs.toFloat()) }
@@ -298,6 +304,32 @@ private fun FullPlayer(
                     ),
                     style = MaterialTheme.typography.bodySmall,
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = onPrevious) {
+                        Icon(
+                            Icons.Outlined.SkipPrevious,
+                            contentDescription = stringResource(R.string.previous_track),
+                        )
+                    }
+                    IconButton(onClick = onToggle) {
+                        Icon(
+                            if (nowPlaying.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
+                            contentDescription = stringResource(
+                                if (nowPlaying.playing) R.string.pause_playback else R.string.resume_playback,
+                            ),
+                        )
+                    }
+                    IconButton(onClick = onNext) {
+                        Icon(
+                            Icons.Outlined.SkipNext,
+                            contentDescription = stringResource(R.string.next_track),
+                        )
+                    }
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
                     AssistChip(onClick = { onSpeed(0.75f) }, label = { Text("0.75×") })
                     AssistChip(onClick = { onSpeed(1f) }, label = { Text("1×") })
@@ -314,11 +346,8 @@ private fun FullPlayer(
             }
         },
         confirmButton = {
-            Button(onClick = onToggle) {
-                Text(stringResource(if (nowPlaying.playing) R.string.pause_playback else R.string.resume_playback))
-            }
+            Button(onClick = onDismiss) { Text(stringResource(R.string.close)) }
         },
-        dismissButton = { Button(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
     )
 }
 
