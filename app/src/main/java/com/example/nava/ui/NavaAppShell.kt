@@ -7,6 +7,7 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -302,12 +303,20 @@ private fun NowPlayingArtwork(nowPlaying: NowPlaying) {
     val fallbackPaletteColor = MaterialTheme.colorScheme.primary
     var bitmap by remember(nowPlaying.track.coverImageUrl) { mutableStateOf<Bitmap?>(null) }
     var paletteColor by remember(nowPlaying.track.coverImageUrl) { mutableStateOf(fallbackPaletteColor) }
+    var rotationReady by remember(nowPlaying.track.id) { mutableStateOf(false) }
+    LaunchedEffect(nowPlaying.playing) {
+        if (nowPlaying.playing) rotationReady = true
+    }
     val rotation by animateFloatAsState(
-        targetValue = if (nowPlaying.playing) 360f else 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(NavaMotion.Slow * 24, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
+        targetValue = if (nowPlaying.playing && rotationReady) 360f else 0f,
+        animationSpec = if (nowPlaying.playing) {
+            infiniteRepeatable(
+                animation = tween(NavaMotion.Slow * 24, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart,
+            )
+        } else {
+            snap()
+        },
         label = "cover rotation",
     )
     LaunchedEffect(bitmap) {
