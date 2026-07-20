@@ -49,6 +49,12 @@
     <string name="font_size_small">کوچک</string>
     <string name="font_size_standard">استاندارد</string>
     <string name="font_size_large">بزرگ</string>
+    <string name="discover_people">کشف کاربران</string>
+    <string name="people">کاربران</string>
+    <string name="search_people">جستجوی کاربران</string>
+    <string name="people_empty">کاربری پیدا نشد.</string>
+    <string name="follow">دنبال کردن</string>
+    <string name="unfollow">لغو دنبال کردن</string>
     <string name="open_settings">باز کردن تنظیمات</string>
     <string name="navigation">ناوبری اصلی</string>
     <string name="top_bar_brand">نوا</string>

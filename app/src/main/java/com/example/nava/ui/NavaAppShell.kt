@@ -106,6 +106,8 @@ import com.example.nava.ui.library.LibraryViewModel
 import com.example.nava.ui.downloads.DownloadViewModel
 import com.example.nava.ui.downloads.DownloadsUiState
 import com.example.nava.ui.profile.ProfileViewModel
+import com.example.nava.ui.social.SocialViewModel
+import com.example.nava.ui.social.SocialPerson
 import com.example.nava.playback.NowPlaying
 import com.example.nava.playback.PlaybackViewModel
 import com.example.nava.ui.theme.NavaMotion
@@ -132,6 +134,7 @@ fun NavaAppShell(
 ) {
     var selectedIndex by rememberSaveable { mutableIntStateOf(0) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    var socialOpen by rememberSaveable { mutableStateOf(false) }
     var playerExpanded by rememberSaveable { mutableStateOf(false) }
     var queueCandidate by remember { mutableStateOf<HomeTrack?>(null) }
     val playbackViewModel: PlaybackViewModel = hiltViewModel()
@@ -167,7 +170,7 @@ fun NavaAppShell(
                     navigationItems.forEachIndexed { index, item ->
                         NavigationBarItem(
                             selected = index == selectedIndex,
-                            onClick = { selectedIndex = index; settingsOpen = false },
+                            onClick = { selectedIndex = index; settingsOpen = false; socialOpen = false },
                             icon = { Icon(item.icon, contentDescription = null) },
                             label = { Text(stringResource(item.title)) },
                         )
@@ -178,6 +181,7 @@ fun NavaAppShell(
     ) { padding ->
         when {
             settingsOpen -> SettingsShell(preferences, onEvent, Modifier.padding(padding))
+            socialOpen -> SocialShell(Modifier.padding(padding))
             selectedIndex == 0 -> HomeShell(
                 modifier = Modifier.padding(padding),
                 onPlay = playbackViewModel::play,
@@ -187,7 +191,7 @@ fun NavaAppShell(
             selectedIndex == 1 -> SearchShell(modifier = Modifier.padding(padding))
             selectedIndex == 2 -> DownloadsShell(Modifier.padding(padding), downloadState, downloadViewModel)
             selectedIndex == 3 -> LibraryShell(modifier = Modifier.padding(padding))
-            selectedIndex == 4 -> ProfileShell(session, Modifier.padding(padding))
+            selectedIndex == 4 -> ProfileShell(session, Modifier.padding(padding), onDiscoverPeople = { socialOpen = true })
             else -> PlaceholderShell(navigationItems[selectedIndex].title, Modifier.padding(padding))
         }
     }
@@ -679,6 +683,7 @@ private fun PlaceholderShell(@StringRes title: Int, modifier: Modifier) {
 private fun ProfileShell(
     session: AuthSession,
     modifier: Modifier,
+    onDiscoverPeople: () -> Unit,
     viewModel: ProfileViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -721,6 +726,7 @@ private fun ProfileShell(
             else Text(stringResource(R.string.save_profile))
         }
         if (!state.isPremium) Button(onClick = viewModel::upgrade, enabled = !state.isSaving) { Text(stringResource(R.string.upgrade_demo)) }
+        Button(onClick = onDiscoverPeople) { Text(stringResource(R.string.discover_people)) }
     }
     state.error?.let { error ->
         AlertDialog(
@@ -728,6 +734,38 @@ private fun ProfileShell(
             text = { Text(error) },
             confirmButton = { Button(onClick = viewModel::dismissError) { Text(stringResource(R.string.close)) } },
         )
+    }
+}
+
+@Composable
+private fun SocialShell(modifier: Modifier, viewModel: SocialViewModel = hiltViewModel()) {
+    val state by viewModel.state.collectAsState()
+    Column(modifier = modifier.fillMaxSize().padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
+        Text(stringResource(R.string.people), style = MaterialTheme.typography.headlineSmall)
+        OutlinedTextField(
+            value = state.query,
+            onValueChange = viewModel::search,
+            label = { Text(stringResource(R.string.search_people)) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        when {
+            state.loading -> CircularProgressIndicator()
+            state.error -> Button(onClick = { viewModel.search(state.query) }) { Text(stringResource(R.string.retry)) }
+            state.people.isEmpty() -> Text(stringResource(R.string.people_empty))
+            else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                items(state.people, key = SocialPerson::id) { person ->
+                    Card {
+                        Row(Modifier.fillMaxWidth().padding(NavaSpacing.Md), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) { Text(person.displayName, style = MaterialTheme.typography.titleMedium) }
+                            Button(onClick = { viewModel.toggleFollow(person) }) {
+                                Text(stringResource(if (person.isFollowing) R.string.unfollow else R.string.follow))
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

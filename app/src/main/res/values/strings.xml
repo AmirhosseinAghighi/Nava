@@ -49,6 +49,12 @@
     <string name="font_size_small">Small</string>
     <string name="font_size_standard">Standard</string>
     <string name="font_size_large">Large</string>
+    <string name="discover_people">Discover people</string>
+    <string name="people">People</string>
+    <string name="search_people">Search people</string>
+    <string name="people_empty">No people found.</string>
+    <string name="follow">Follow</string>
+    <string name="unfollow">Unfollow</string>
     <string name="open_settings">Open settings</string>
     <string name="navigation">Main navigation</string>
     <string name="top_bar_brand">Nava</string>
