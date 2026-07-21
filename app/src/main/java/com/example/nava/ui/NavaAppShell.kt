@@ -103,11 +103,13 @@ import com.example.nava.ui.home.HomeViewModel
 import com.example.nava.ui.search.SearchViewModel
 import com.example.nava.ui.library.LibraryUiState
 import com.example.nava.ui.library.LibraryViewModel
+import com.example.nava.ui.library.LikesViewModel
 import com.example.nava.ui.downloads.DownloadViewModel
 import com.example.nava.ui.downloads.DownloadsUiState
 import com.example.nava.ui.profile.ProfileViewModel
 import com.example.nava.ui.social.SocialViewModel
 import com.example.nava.ui.social.SocialPerson
+import com.example.nava.ui.social.SocialSection
 import com.example.nava.playback.NowPlaying
 import com.example.nava.playback.PlaybackViewModel
 import com.example.nava.ui.theme.NavaMotion
@@ -139,6 +141,7 @@ fun NavaAppShell(
     var queueCandidate by remember { mutableStateOf<HomeTrack?>(null) }
     val playbackViewModel: PlaybackViewModel = hiltViewModel()
     val downloadViewModel: DownloadViewModel = hiltViewModel()
+    val likesViewModel: LikesViewModel = hiltViewModel()
     val nowPlaying by playbackViewModel.nowPlaying.collectAsState()
     val playbackError by playbackViewModel.playbackError.collectAsState()
     val downloadState by downloadViewModel.state.collectAsState()
@@ -190,7 +193,7 @@ fun NavaAppShell(
             )
             selectedIndex == 1 -> SearchShell(modifier = Modifier.padding(padding))
             selectedIndex == 2 -> DownloadsShell(Modifier.padding(padding), downloadState, downloadViewModel)
-            selectedIndex == 3 -> LibraryShell(modifier = Modifier.padding(padding))
+            selectedIndex == 3 -> LibraryShell(modifier = Modifier.padding(padding), likesViewModel = likesViewModel)
             selectedIndex == 4 -> ProfileShell(session, Modifier.padding(padding), onDiscoverPeople = { socialOpen = true })
             else -> PlaceholderShell(navigationItems[selectedIndex].title, Modifier.padding(padding))
         }
@@ -227,6 +230,8 @@ fun NavaAppShell(
     queueCandidate?.let { track ->
         val isDownloaded = track.id in downloadState.downloadedTrackIds
         val isDownloading = track.id in downloadState.downloadingTrackIds
+        val likes by likesViewModel.state.collectAsState()
+        val isLiked = track.id in likes.likedIds
         AlertDialog(
             onDismissRequest = { queueCandidate = null },
             title = { Text(stringResource(R.string.song_actions)) },
@@ -241,6 +246,7 @@ fun NavaAppShell(
             },
             dismissButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                    Button(onClick = { likesViewModel.toggle(track) }) { Text(stringResource(if (isLiked) R.string.unlike_song else R.string.like_song)) }
                     Button(
                         enabled = !isDownloaded && !isDownloading,
                         onClick = {
@@ -459,15 +465,17 @@ private fun NowPlayingArtwork(nowPlaying: NowPlaying) {
     }
 }
 
-@Composable private fun LibraryShell(modifier: Modifier, viewModel: LibraryViewModel = hiltViewModel()) {
+@Composable private fun LibraryShell(modifier: Modifier, viewModel: LibraryViewModel = hiltViewModel(), likesViewModel: LikesViewModel) {
  val state by viewModel.state.collectAsState()
+ val likes by likesViewModel.state.collectAsState()
  Column(modifier = modifier.fillMaxSize().padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
   Text(stringResource(R.string.library_title), style = MaterialTheme.typography.headlineSmall)
   when (val current = state) {
    LibraryUiState.Loading -> CircularProgressIndicator()
    LibraryUiState.Error -> { Text(stringResource(R.string.library_error)); Button(onClick = viewModel::reload) { Text(stringResource(R.string.retry)) } }
    is LibraryUiState.Content -> {
-    Text(stringResource(R.string.liked_count, current.summary.likedCount), style = MaterialTheme.typography.titleMedium)
+    Text(stringResource(R.string.liked_count, likes.songs.size.toLong()), style = MaterialTheme.typography.titleMedium)
+    if (likes.songs.isEmpty()) Text(stringResource(R.string.liked_songs_empty)) else LazyColumn(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) { items(likes.songs, key = { it.id }) { song -> Card { Row(Modifier.fillMaxWidth().padding(NavaSpacing.Md), verticalAlignment = Alignment.CenterVertically) { Text(song.title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium); Button(onClick = { likesViewModel.remove(song.id) }) { Text(stringResource(R.string.unlike_song)) } } } } }
     if (current.summary.playlists.isEmpty()) Text(stringResource(R.string.library_empty)) else LazyColumn(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) { items(current.summary.playlists, key = { it.id }) { playlist -> Card { Column(Modifier.padding(NavaSpacing.Md)) { Text(playlist.title, style = MaterialTheme.typography.titleMedium); playlist.description?.let { Text(it) } } } } }
    }
   }
@@ -742,7 +750,13 @@ private fun SocialShell(modifier: Modifier, viewModel: SocialViewModel = hiltVie
     val state by viewModel.state.collectAsState()
     Column(modifier = modifier.fillMaxSize().padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
         Text(stringResource(R.string.people), style = MaterialTheme.typography.headlineSmall)
-        OutlinedTextField(
+        Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+            AssistChip(onClick = { viewModel.select(SocialSection.PEOPLE) }, label = { Text(stringResource(R.string.people)) })
+            AssistChip(onClick = { viewModel.select(SocialSection.FOLLOWING) }, label = { Text(stringResource(R.string.following)) })
+            AssistChip(onClick = { viewModel.select(SocialSection.FOLLOWERS) }, label = { Text(stringResource(R.string.followers)) })
+            AssistChip(onClick = { viewModel.select(SocialSection.PLAYLISTS) }, label = { Text(stringResource(R.string.public_playlists)) })
+        }
+        if (state.section == SocialSection.PEOPLE) OutlinedTextField(
             value = state.query,
             onValueChange = viewModel::search,
             label = { Text(stringResource(R.string.search_people)) },
@@ -751,8 +765,12 @@ private fun SocialShell(modifier: Modifier, viewModel: SocialViewModel = hiltVie
         )
         when {
             state.loading -> CircularProgressIndicator()
-            state.error -> Button(onClick = { viewModel.search(state.query) }) { Text(stringResource(R.string.retry)) }
-            state.people.isEmpty() -> Text(stringResource(R.string.people_empty))
+            state.error -> Button(onClick = { viewModel.select(state.section) }) { Text(stringResource(R.string.retry)) }
+            state.section == SocialSection.PLAYLISTS && state.playlists.isEmpty() -> Text(stringResource(R.string.playlists_empty))
+            state.people.isEmpty() && state.section != SocialSection.PLAYLISTS -> Text(stringResource(R.string.people_empty))
+            state.section == SocialSection.PLAYLISTS -> LazyColumn(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                items(state.playlists, key = { it.id }) { playlist -> Card { Column(Modifier.padding(NavaSpacing.Md)) { Text(playlist.title, style = MaterialTheme.typography.titleMedium); Text(playlist.ownerName); playlist.description?.let { Text(it) }; Text(stringResource(R.string.track_count, playlist.trackCount)) } } }
+            }
             else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
                 items(state.people, key = SocialPerson::id) { person ->
                     Card {

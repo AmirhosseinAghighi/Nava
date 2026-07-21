@@ -23,7 +23,7 @@
     <string name="downloads_empty">No offline downloads yet. Long-press a Home song to add one.</string>
     <string name="remove_download">Remove</string>
     <string name="playlists">Playlists</string>
-    <string name="library_title">Your library</string><string name="liked_count">Liked songs: %1$d</string><string name="library_empty">Create a playlist or like a track to build your library.</string><string name="library_error">Your library could not be loaded.</string>
+    <string name="library_title">Your library</string><string name="liked_count">Liked songs: %1$d</string><string name="like_song">Like</string><string name="unlike_song">Unlike</string><string name="liked_songs_empty">You have not liked any songs yet.</string><string name="library_empty">Create a playlist or like a track to build your library.</string><string name="library_error">Your library could not be loaded.</string>
     <string name="profile">Profile</string>
     <string name="home_welcome">Good to have you here</string>
     <string name="shell_placeholder">This area is ready for the next feature.</string>
@@ -55,6 +55,11 @@
     <string name="people_empty">No people found.</string>
     <string name="follow">Follow</string>
     <string name="unfollow">Unfollow</string>
+    <string name="following">Following</string>
+    <string name="followers">Followers</string>
+    <string name="public_playlists">Public playlists</string>
+    <string name="playlists_empty">No public playlists yet.</string>
+    <string name="track_count">%1$d tracks</string>
     <string name="open_settings">Open settings</string>
     <string name="navigation">Main navigation</string>
     <string name="top_bar_brand">Nava</string>

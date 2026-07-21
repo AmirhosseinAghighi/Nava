@@ -23,7 +23,7 @@
     <string name="downloads_empty">هنوز دانلود آفلاینی ندارید. برای افزودن، روی آهنگ خانه نگه دارید.</string>
     <string name="remove_download">حذف</string>
     <string name="playlists">پلی‌لیست‌ها</string>
-    <string name="library_title">کتابخانه شما</string><string name="liked_count">آهنگ‌های پسندیده: %1$d</string><string name="library_empty">برای ساخت کتابخانه، پلی‌لیست بسازید یا آهنگی را بپسندید.</string><string name="library_error">بارگیری کتابخانه انجام نشد.</string>
+    <string name="library_title">کتابخانه شما</string><string name="liked_count">آهنگ‌های پسندیده: %1$d</string><string name="like_song">پسندیدن</string><string name="unlike_song">حذف پسند</string><string name="liked_songs_empty">هنوز آهنگی را نپسندیده‌اید.</string><string name="library_empty">برای ساخت کتابخانه، پلی‌لیست بسازید یا آهنگی را بپسندید.</string><string name="library_error">بارگیری کتابخانه انجام نشد.</string>
     <string name="profile">پروفایل</string>
     <string name="home_welcome">خوش آمدید</string>
     <string name="shell_placeholder">این بخش برای قابلیت بعدی آماده است.</string>
@@ -55,6 +55,11 @@
     <string name="people_empty">کاربری پیدا نشد.</string>
     <string name="follow">دنبال کردن</string>
     <string name="unfollow">لغو دنبال کردن</string>
+    <string name="following">دنبال‌شوندگان</string>
+    <string name="followers">دنبال‌کنندگان</string>
+    <string name="public_playlists">پلی‌لیست‌های عمومی</string>
+    <string name="playlists_empty">هنوز پلی‌لیست عمومی وجود ندارد.</string>
+    <string name="track_count">%1$d آهنگ</string>
     <string name="open_settings">باز کردن تنظیمات</string>
     <string name="navigation">ناوبری اصلی</string>
     <string name="top_bar_brand">نوا</string>
