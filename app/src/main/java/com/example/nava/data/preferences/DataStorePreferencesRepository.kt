@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.nava.domain.preferences.AppLanguage
+import com.example.nava.domain.preferences.FontScale
 import com.example.nava.domain.preferences.PreferencesRepository
 import com.example.nava.domain.preferences.ThemeMode
 import com.example.nava.domain.preferences.UserPreferences
@@ -30,6 +31,7 @@ class DataStorePreferencesRepository @Inject constructor(
             UserPreferences(
                 themeMode = stored[ThemeModeKey]?.toThemeMode() ?: ThemeMode.SYSTEM,
                 language = stored[LanguageKey]?.toLanguage() ?: AppLanguage.SYSTEM,
+                fontScale = stored[FontScaleKey]?.toFontScale() ?: FontScale.STANDARD,
             )
         }
 
@@ -41,11 +43,17 @@ class DataStorePreferencesRepository @Inject constructor(
         context.settingsDataStore.edit { it[LanguageKey] = language.name }
     }
 
+    override suspend fun setFontScale(scale: FontScale) {
+        context.settingsDataStore.edit { it[FontScaleKey] = scale.name }
+    }
+
     private fun String.toThemeMode() = ThemeMode.entries.firstOrNull { it.name == this } ?: ThemeMode.SYSTEM
     private fun String.toLanguage() = AppLanguage.entries.firstOrNull { it.name == this } ?: AppLanguage.SYSTEM
+    private fun String.toFontScale() = FontScale.entries.firstOrNull { it.name == this } ?: FontScale.STANDARD
 
     private companion object {
         val ThemeModeKey = stringPreferencesKey("theme_mode")
         val LanguageKey = stringPreferencesKey("language")
+        val FontScaleKey = stringPreferencesKey("font_scale")
     }
 }

@@ -2,6 +2,8 @@ package com.example.nava.ui
 
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -90,6 +92,7 @@ import com.example.nava.R
 import com.example.nava.domain.auth.AuthSession
 import com.example.nava.domain.catalog.HomeTrack
 import com.example.nava.domain.preferences.AppLanguage
+import com.example.nava.domain.preferences.FontScale
 import com.example.nava.domain.preferences.ThemeMode
 import com.example.nava.domain.preferences.UserPreferences
 import com.example.nava.ui.theme.NavaSpacing
@@ -676,16 +679,41 @@ private fun ProfileShell(
     modifier: Modifier,
     viewModel: ProfileViewModel = hiltViewModel(),
 ) {
-    val premium by viewModel.premium.collectAsState()
+    val state by viewModel.state.collectAsState()
+    val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let(viewModel::uploadAvatar)
+    }
     Column(modifier = modifier.fillMaxSize().padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Lg)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
-            Icon(Icons.Outlined.AccountCircle, contentDescription = stringResource(R.string.user_avatar), modifier = Modifier.size(NavaSpacing.Xxl))
+            Button(onClick = { avatarPicker.launch("image/*") }, enabled = !state.isSaving) {
+                state.avatarUrl?.let { url ->
+                    AsyncImage(
+                        model = url,
+                        contentDescription = stringResource(R.string.user_avatar),
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(NavaSpacing.Xxl).clip(CircleShape),
+                    )
+                } ?: Icon(Icons.Outlined.AccountCircle, contentDescription = stringResource(R.string.user_avatar), modifier = Modifier.size(NavaSpacing.Xxl))
+            }
             Column {
-                Text(session.email.substringBefore('@'), style = MaterialTheme.typography.titleLarge)
-                Text(stringResource(if (premium) R.string.premium else R.string.standard), style = MaterialTheme.typography.bodyMedium)
+                Text(if (state.isLoading) stringResource(R.string.profile_loading) else state.displayName, style = MaterialTheme.typography.titleLarge)
+                Text(session.email, style = MaterialTheme.typography.bodyMedium)
+                AssistChip(onClick = {}, label = { Text(stringResource(if (state.isPremium) R.string.premium else R.string.standard)) })
             }
         }
-        if (!premium) Button(onClick = viewModel::upgrade) { Text(stringResource(R.string.upgrade_demo)) }
+        OutlinedTextField(
+            value = state.displayName,
+            onValueChange = viewModel::changeDisplayName,
+            enabled = !state.isLoading && !state.isSaving,
+            label = { Text(stringResource(R.string.display_name)) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Button(onClick = viewModel::saveProfile, enabled = !state.isLoading && !state.isSaving) {
+            if (state.isSaving) CircularProgressIndicator(modifier = Modifier.size(NavaSpacing.Md))
+            else Text(stringResource(R.string.save_profile))
+        }
+        if (!state.isPremium) Button(onClick = viewModel::upgrade, enabled = !state.isSaving) { Text(stringResource(R.string.upgrade_demo)) }
         Text(stringResource(R.string.settings), style = MaterialTheme.typography.titleLarge)
         SettingButtons(
             title = R.string.theme,
@@ -706,7 +734,24 @@ private fun ProfileShell(
             selected = preferences.language,
             onSelected = { onEvent(NavaEvent.SetLanguage(it)) },
         )
+        SettingButtons(
+            title = R.string.font_size,
+            options = listOf(
+                R.string.font_size_small to FontScale.SMALL,
+                R.string.font_size_standard to FontScale.STANDARD,
+                R.string.font_size_large to FontScale.LARGE,
+            ),
+            selected = preferences.fontScale,
+            onSelected = { onEvent(NavaEvent.SetFontScale(it)) },
+        )
         AssistChip(onClick = { onEvent(NavaEvent.SignOut) }, label = { Text(stringResource(R.string.sign_out)) })
+    }
+    state.error?.let { error ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissError,
+            text = { Text(error) },
+            confirmButton = { Button(onClick = viewModel::dismissError) { Text(stringResource(R.string.close)) } },
+        )
     }
 }
 

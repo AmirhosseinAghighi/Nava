@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.material3.CircularProgressIndicator
@@ -14,12 +15,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.core.os.LocaleListCompat
 import androidx.appcompat.app.AppCompatDelegate
 import com.example.nava.domain.preferences.AppLanguage
+import com.example.nava.domain.preferences.FontScale
 import com.example.nava.domain.preferences.ThemeMode
 import com.example.nava.ui.NavaAppShell
 import com.example.nava.ui.NavaEffect
@@ -65,6 +69,11 @@ private fun NavaRoot(viewModel: NavaViewModel = hiltViewModel()) {
         ThemeMode.LIGHT -> false
         else -> systemDark
     }
+    val fontScale = when (preferences?.fontScale) {
+        FontScale.SMALL -> 0.9f
+        FontScale.LARGE -> 1.15f
+        else -> 1f
+    }
 
     LaunchedEffect(preferences?.language) {
         AppCompatDelegate.setApplicationLocales(
@@ -76,20 +85,23 @@ private fun NavaRoot(viewModel: NavaViewModel = hiltViewModel()) {
         )
     }
 
-    NavaTheme(darkTheme = dark) {
-        when (val current = state) {
-            NavaUiState.Loading -> LoadingContent()
-            is NavaUiState.SignedOut -> AuthScreen(
-                onSignIn = { email, password -> viewModel.onEvent(NavaEvent.SignIn(email, password)) },
-                onSignUp = { email, password -> viewModel.onEvent(NavaEvent.SignUp(email, password)) },
-                isAuthenticating = current.isAuthenticating,
-                effects = viewModel.effects,
-            )
-            is NavaUiState.SignedIn -> NavaAppShell(
-                session = current.session,
-                preferences = current.preferences,
-                onEvent = viewModel::onEvent,
-            )
+    val density = LocalDensity.current
+    CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
+        NavaTheme(darkTheme = dark) {
+            when (val current = state) {
+                NavaUiState.Loading -> LoadingContent()
+                is NavaUiState.SignedOut -> AuthScreen(
+                    onSignIn = { email, password -> viewModel.onEvent(NavaEvent.SignIn(email, password)) },
+                    onSignUp = { email, password -> viewModel.onEvent(NavaEvent.SignUp(email, password)) },
+                    isAuthenticating = current.isAuthenticating,
+                    effects = viewModel.effects,
+                )
+                is NavaUiState.SignedIn -> NavaAppShell(
+                    session = current.session,
+                    preferences = current.preferences,
+                    onEvent = viewModel::onEvent,
+                )
+            }
         }
     }
 }

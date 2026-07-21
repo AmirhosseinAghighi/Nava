@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.nava.domain.auth.AuthRepository
 import com.example.nava.domain.auth.AuthSession
 import com.example.nava.domain.preferences.AppLanguage
+import com.example.nava.domain.preferences.FontScale
 import com.example.nava.domain.preferences.PreferencesRepository
 import com.example.nava.domain.preferences.ThemeMode
 import com.example.nava.domain.preferences.UserPreferences
@@ -34,6 +35,7 @@ sealed interface NavaEvent {
     data class SignUp(val email: String, val password: String) : NavaEvent
     data class SetTheme(val mode: ThemeMode) : NavaEvent
     data class SetLanguage(val language: AppLanguage) : NavaEvent
+    data class SetFontScale(val scale: FontScale) : NavaEvent
     data object SignOut : NavaEvent
 }
 
@@ -72,6 +74,7 @@ class NavaViewModel @Inject constructor(
             )
             is NavaEvent.SetTheme -> preferencesRepository.setThemeMode(event.mode)
             is NavaEvent.SetLanguage -> preferencesRepository.setLanguage(event.language)
+            is NavaEvent.SetFontScale -> preferencesRepository.setFontScale(event.scale)
             NavaEvent.SignOut -> authRepository.signOut()
         }
     }
