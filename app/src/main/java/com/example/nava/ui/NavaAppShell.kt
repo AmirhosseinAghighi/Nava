@@ -84,10 +84,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.nava.R
 import com.example.nava.domain.auth.AuthSession
 import com.example.nava.domain.catalog.HomeTrack
@@ -680,6 +682,7 @@ private fun ProfileShell(
     viewModel: ProfileViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val context = LocalContext.current
     val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let(viewModel::uploadAvatar)
     }
@@ -688,7 +691,11 @@ private fun ProfileShell(
             Button(onClick = { avatarPicker.launch("image/*") }, enabled = !state.isSaving) {
                 state.avatarUrl?.let { url ->
                     AsyncImage(
-                        model = url,
+                        model = ImageRequest.Builder(context)
+                            .data(url)
+                            .memoryCacheKey(state.avatarPath)
+                            .diskCacheKey(state.avatarPath)
+                            .build(),
                         contentDescription = stringResource(R.string.user_avatar),
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.size(NavaSpacing.Xxl).clip(CircleShape),
