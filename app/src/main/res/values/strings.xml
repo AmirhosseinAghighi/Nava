@@ -124,4 +124,17 @@
     <string name="featured_badge">Featured</string>
     <string name="home_load_error">We could not load the catalog right now.</string>
     <string name="retry">Try again</string>
+    <string name="messages">Messages</string>
+    <string name="messages_empty">No conversations yet. Start one from People.</string>
+    <string name="open_chat">Message user</string>
+    <string name="message_hint">Write a message</string>
+    <string name="send_message">Send message</string>
+    <string name="share_now_playing">Share now playing</string>
+    <string name="shared_music">Shared music</string>
+    <string name="play_shared_track">Play shared track</string>
+    <string name="message_sent">Sent</string>
+    <string name="message_delivered">Delivered</string>
+    <string name="message_read">Read</string>
+    <string name="back">Back</string>
+    <string name="typing">%1$s is typing…</string>
 </resources>

@@ -124,4 +124,17 @@
     <string name="featured_badge">پیشنهاد ویژه</string>
     <string name="home_load_error">فعلاً کاتالوگ بارگیری نشد.</string>
     <string name="retry">تلاش دوباره</string>
+    <string name="messages">پیام‌ها</string>
+    <string name="messages_empty">هنوز گفتگویی ندارید. از بخش کاربران یک گفتگو آغاز کنید.</string>
+    <string name="open_chat">پیام به کاربر</string>
+    <string name="message_hint">پیام بنویسید</string>
+    <string name="send_message">ارسال پیام</string>
+    <string name="share_now_playing">اشتراک‌گذاری آهنگ در حال پخش</string>
+    <string name="shared_music">موسیقی اشتراک‌گذاری‌شده</string>
+    <string name="play_shared_track">پخش آهنگ اشتراک‌گذاری‌شده</string>
+    <string name="message_sent">ارسال شد</string>
+    <string name="message_delivered">تحویل شد</string>
+    <string name="message_read">خوانده شد</string>
+    <string name="back">بازگشت</string>
+    <string name="typing">%1$s در حال نوشتن است…</string>
 </resources>

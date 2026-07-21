@@ -41,6 +41,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Clear
 import androidx.compose.material.icons.outlined.Favorite
@@ -148,6 +149,8 @@ import com.example.nava.ui.profile.ProfileViewModel
 import com.example.nava.ui.social.SocialViewModel
 import com.example.nava.ui.social.SocialPerson
 import com.example.nava.ui.social.SocialSection
+import com.example.nava.ui.chat.ChatShell
+import com.example.nava.ui.chat.ChatViewModel
 import com.example.nava.playback.NowPlaying
 import com.example.nava.playback.PlaybackViewModel
 import com.example.nava.ui.theme.NavaMotion
@@ -1519,8 +1522,15 @@ private fun ProfileShell(
 @Composable
 private fun SocialShell(modifier: Modifier, viewModel: SocialViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsState()
+    val chatViewModel: ChatViewModel = hiltViewModel()
+    var messagesOpen by rememberSaveable { mutableStateOf(false) }
+    if (messagesOpen) {
+        ChatShell(modifier = modifier, onBack = { messagesOpen = false }, viewModel = chatViewModel)
+        return
+    }
     Column(modifier = modifier.fillMaxSize().padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
         Text(stringResource(R.string.people), style = MaterialTheme.typography.headlineSmall)
+        Button(onClick = { messagesOpen = true }) { Text(stringResource(R.string.messages)) }
         Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
             AssistChip(onClick = { viewModel.select(SocialSection.PEOPLE) }, label = { Text(stringResource(R.string.people)) })
             AssistChip(onClick = { viewModel.select(SocialSection.FOLLOWING) }, label = { Text(stringResource(R.string.following)) })
@@ -1549,6 +1559,9 @@ private fun SocialShell(modifier: Modifier, viewModel: SocialViewModel = hiltVie
                             Column(Modifier.weight(1f)) { Text(person.displayName, style = MaterialTheme.typography.titleMedium) }
                             Button(onClick = { viewModel.toggleFollow(person) }) {
                                 Text(stringResource(if (person.isFollowing) R.string.unfollow else R.string.follow))
+                            }
+                            IconButton(onClick = { chatViewModel.open(person); messagesOpen = true }) {
+                                Icon(Icons.Outlined.Chat, contentDescription = stringResource(R.string.open_chat))
                             }
                         }
                     }
