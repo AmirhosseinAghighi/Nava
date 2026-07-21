@@ -1,5 +1,13 @@
 pluginManagement {
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id == "com.android.application") {
+                useModule("com.android.tools.build:gradle:${requested.version}")
+            }
+        }
+    }
     repositories {
+        maven(url = "https://maven.myket.ir/")
         google {
             content {
                 includeGroupByRegex("com\\.android.*")
@@ -17,6 +25,7 @@ plugins {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        maven(url = "https://maven.myket.ir/")
         google()
         mavenCentral()
     }
