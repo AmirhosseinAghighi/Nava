@@ -129,6 +129,7 @@ fun NavaAppShell(
     onEvent: (NavaEvent) -> Unit,
 ) {
     var selectedIndex by rememberSaveable { mutableIntStateOf(0) }
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var playerExpanded by rememberSaveable { mutableStateOf(false) }
     var queueCandidate by remember { mutableStateOf<HomeTrack?>(null) }
     val playbackViewModel: PlaybackViewModel = hiltViewModel()
@@ -140,12 +141,12 @@ fun NavaAppShell(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.top_bar_brand), style = MaterialTheme.typography.titleLarge) },
+                title = { Text(stringResource(if (settingsOpen) R.string.settings else R.string.top_bar_brand), style = MaterialTheme.typography.titleLarge) },
                 actions = {
                     IconButton(onClick = {}) {
                         Icon(Icons.Outlined.NotificationsNone, contentDescription = stringResource(R.string.notification))
                     }
-                    IconButton(onClick = { selectedIndex = navigationItems.lastIndex }) {
+                    IconButton(onClick = { settingsOpen = !settingsOpen }) {
                         Icon(Icons.Outlined.Settings, contentDescription = stringResource(R.string.open_settings))
                     }
                 },
@@ -164,7 +165,7 @@ fun NavaAppShell(
                     navigationItems.forEachIndexed { index, item ->
                         NavigationBarItem(
                             selected = index == selectedIndex,
-                            onClick = { selectedIndex = index },
+                            onClick = { selectedIndex = index; settingsOpen = false },
                             icon = { Icon(item.icon, contentDescription = null) },
                             label = { Text(stringResource(item.title)) },
                         )
@@ -173,17 +174,18 @@ fun NavaAppShell(
             }
         },
     ) { padding ->
-        when (selectedIndex) {
-            0 -> HomeShell(
+        when {
+            settingsOpen -> SettingsShell(preferences, onEvent, Modifier.padding(padding))
+            selectedIndex == 0 -> HomeShell(
                 modifier = Modifier.padding(padding),
                 onPlay = playbackViewModel::play,
                 onQueue = { queueCandidate = it },
                 onShuffleSource = playbackViewModel::setShuffleSource,
             )
-            1 -> SearchShell(modifier = Modifier.padding(padding))
-            2 -> DownloadsShell(Modifier.padding(padding), downloadState, downloadViewModel)
-            3 -> LibraryShell(modifier = Modifier.padding(padding))
-            4 -> ProfileShell(session, preferences, onEvent, Modifier.padding(padding))
+            selectedIndex == 1 -> SearchShell(modifier = Modifier.padding(padding))
+            selectedIndex == 2 -> DownloadsShell(Modifier.padding(padding), downloadState, downloadViewModel)
+            selectedIndex == 3 -> LibraryShell(modifier = Modifier.padding(padding))
+            selectedIndex == 4 -> ProfileShell(session, Modifier.padding(padding))
             else -> PlaceholderShell(navigationItems[selectedIndex].title, Modifier.padding(padding))
         }
     }
@@ -674,8 +676,6 @@ private fun PlaceholderShell(@StringRes title: Int, modifier: Modifier) {
 @OptIn(ExperimentalMaterial3Api::class)
 private fun ProfileShell(
     session: AuthSession,
-    preferences: UserPreferences,
-    onEvent: (NavaEvent) -> Unit,
     modifier: Modifier,
     viewModel: ProfileViewModel = hiltViewModel(),
 ) {
@@ -714,7 +714,25 @@ private fun ProfileShell(
             else Text(stringResource(R.string.save_profile))
         }
         if (!state.isPremium) Button(onClick = viewModel::upgrade, enabled = !state.isSaving) { Text(stringResource(R.string.upgrade_demo)) }
-        Text(stringResource(R.string.settings), style = MaterialTheme.typography.titleLarge)
+    }
+    state.error?.let { error ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissError,
+            text = { Text(error) },
+            confirmButton = { Button(onClick = viewModel::dismissError) { Text(stringResource(R.string.close)) } },
+        )
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun SettingsShell(
+    preferences: UserPreferences,
+    onEvent: (NavaEvent) -> Unit,
+    modifier: Modifier,
+) {
+    Column(modifier = modifier.fillMaxSize().padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Lg)) {
+        Text(stringResource(R.string.settings), style = MaterialTheme.typography.headlineSmall)
         SettingButtons(
             title = R.string.theme,
             options = listOf(
@@ -745,13 +763,6 @@ private fun ProfileShell(
             onSelected = { onEvent(NavaEvent.SetFontScale(it)) },
         )
         AssistChip(onClick = { onEvent(NavaEvent.SignOut) }, label = { Text(stringResource(R.string.sign_out)) })
-    }
-    state.error?.let { error ->
-        AlertDialog(
-            onDismissRequest = viewModel::dismissError,
-            text = { Text(error) },
-            confirmButton = { Button(onClick = viewModel::dismissError) { Text(stringResource(R.string.close)) } },
-        )
     }
 }
 
