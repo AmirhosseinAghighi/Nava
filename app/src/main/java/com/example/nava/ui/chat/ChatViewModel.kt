@@ -18,14 +18,15 @@ import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.broadcast
 import io.github.jan.supabase.realtime.broadcastFlow
 import io.github.jan.supabase.realtime.postgresChangeFlow
-import io.github.jan.supabase.realtime.presenceDataFlow
 import io.github.jan.supabase.realtime.realtime
-import io.github.jan.supabase.realtime.track
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
@@ -79,9 +80,13 @@ class ChatViewModel @Inject constructor(
     val state = _state.asStateFlow()
     private var activeChannel: RealtimeChannel? = null
     private var liveMessagesJob: Job? = null
-    private var presenceJob: Job? = null
+    private var messageBroadcastJob: Job? = null
+    private var typingBroadcastJob: Job? = null
+    private var messageSyncJob: Job? = null
     private var receiptJob: Job? = null
     private var typingResetJob: Job? = null
+    private var remoteTypingResetJob: Job? = null
+    private val messageLoadMutex = Mutex()
     private val sharedTracks = mutableMapOf<String, HomeTrack>()
 
     init { refreshInbox() }
@@ -214,6 +219,12 @@ class ChatViewModel @Inject constructor(
         }.onSuccess {
             _state.value = _state.value.copy(sending = false)
             updateTyping(false)
+            runCatching {
+                activeChannel?.broadcast(
+                    MESSAGE_EVENT,
+                    MessageEvent(currentUser?.id.orEmpty()),
+                )
+            }
             if (_state.value.activeConversation?.id == conversationId) {
                 loadMessages(conversationId)
             } else {
@@ -231,7 +242,8 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    private suspend fun loadMessages(conversationId: String) {
+    private suspend fun loadMessages(conversationId: String) = messageLoadMutex.withLock {
+        if (_state.value.activeConversation?.id != conversationId) return@withLock
         val currentUserId = supabase.auth.currentUserOrNull()?.id ?: return failLoading()
         try {
             val dtos = supabase.postgrest.rpc(
@@ -243,6 +255,7 @@ class ChatViewModel @Inject constructor(
                 runCatching { resolveSharedTrack(trackId).coverImageUrl }.getOrNull()
             }
             val messages = dtos.map { it.toMessage(currentUserId, coverUrls[it.trackId]) }
+            if (_state.value.activeConversation?.id != conversationId) return@withLock
             _state.value = _state.value.copy(messages = messages, loading = false, offline = false)
             cacheMessages(currentUserId, conversationId, messages)
             if (messages.any { !it.isMine && it.status != ChatMessageStatus.Read }) markRead(conversationId)
@@ -271,7 +284,6 @@ class ChatViewModel @Inject constructor(
         val currentUser = supabase.auth.currentUserOrNull() ?: return
         val channel = supabase.channel("conversation:${conversation.id}") {
             isPrivate = true
-            presence { key = currentUser.id }
         }
         activeChannel = channel
         liveMessagesJob = viewModelScope.launch {
@@ -283,10 +295,30 @@ class ChatViewModel @Inject constructor(
                 refreshInbox()
             }
         }
-        presenceJob = viewModelScope.launch {
-            channel.presenceDataFlow<TypingPresence>().collect { presences ->
-                val typingUser = presences.firstOrNull { it.userId != currentUser.id && it.isTyping }
-                _state.value = _state.value.copy(typingName = typingUser?.let { conversation.peerName })
+        messageBroadcastJob = viewModelScope.launch {
+            channel.broadcastFlow<MessageEvent>(MESSAGE_EVENT).collect { event ->
+                if (event.userId != currentUser.id) {
+                    loadMessages(conversation.id)
+                    refreshInbox()
+                }
+            }
+        }
+        typingBroadcastJob = viewModelScope.launch {
+            channel.broadcastFlow<TypingEvent>(TYPING_EVENT).collect { event ->
+                if (event.userId != currentUser.id) {
+                    remoteTypingResetJob?.cancel()
+                    _state.value = _state.value.copy(
+                        typingName = if (event.isTyping) conversation.peerName else null,
+                    )
+                    if (event.isTyping) {
+                        remoteTypingResetJob = viewModelScope.launch {
+                            delay(REMOTE_TYPING_TIMEOUT_MS)
+                            if (_state.value.activeConversation?.id == conversation.id) {
+                                _state.value = _state.value.copy(typingName = null)
+                            }
+                        }
+                    }
+                }
             }
         }
         receiptJob = viewModelScope.launch {
@@ -294,8 +326,13 @@ class ChatViewModel @Inject constructor(
                 if (receipt.userId != currentUser.id) loadMessages(conversation.id)
             }
         }
+        messageSyncJob = viewModelScope.launch {
+            while (isActive && _state.value.activeConversation?.id == conversation.id) {
+                delay(MESSAGE_SYNC_FALLBACK_MS)
+                loadMessages(conversation.id)
+            }
+        }
         channel.subscribe(blockUntilSubscribed = true)
-        channel.track(TypingPresence(currentUser.id, currentUser.email ?: currentUser.id, false))
         markRead(conversation.id)
     }
 
@@ -305,14 +342,20 @@ class ChatViewModel @Inject constructor(
         runCatching {
             activeChannel
                 ?.takeIf { it.status.value == RealtimeChannel.Status.SUBSCRIBED }
-                ?.track(TypingPresence(user.id, user.email ?: user.id, isTyping))
+                ?.broadcast(
+                    TYPING_EVENT,
+                    TypingEvent(user.id, user.email ?: user.id, isTyping),
+                )
         }
     }
 
     private suspend fun stopRealtime() {
         typingResetJob?.cancel()
+        remoteTypingResetJob?.cancel()
         liveMessagesJob?.cancel()
-        presenceJob?.cancel()
+        messageBroadcastJob?.cancel()
+        typingBroadcastJob?.cancel()
+        messageSyncJob?.cancel()
         receiptJob?.cancel()
         activeChannel?.let { supabase.realtime.removeChannel(it) }
         activeChannel = null
@@ -387,11 +430,14 @@ class ChatViewModel @Inject constructor(
     }
 
     @Serializable
-    private data class TypingPresence(
+    private data class TypingEvent(
         @SerialName("user_id") val userId: String,
         @SerialName("display_name") val displayName: String,
         @SerialName("is_typing") val isTyping: Boolean,
     )
+
+    @Serializable
+    private data class MessageEvent(@SerialName("user_id") val userId: String)
 
     @Serializable
     private data class ReceiptEvent(@SerialName("user_id") val userId: String)
@@ -442,6 +488,10 @@ class ChatViewModel @Inject constructor(
         const val PAGE_SIZE = 50
         const val MAX_MESSAGE_LENGTH = 2_000
         const val TYPING_IDLE_MS = 1_200L
+        const val REMOTE_TYPING_TIMEOUT_MS = 4_000L
+        const val MESSAGE_SYNC_FALLBACK_MS = 2_000L
         const val RECEIPT_EVENT = "message-receipt"
+        const val MESSAGE_EVENT = "message-changed"
+        const val TYPING_EVENT = "typing-changed"
     }
 }

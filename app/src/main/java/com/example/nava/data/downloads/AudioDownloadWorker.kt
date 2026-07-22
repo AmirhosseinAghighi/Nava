@@ -38,7 +38,9 @@ class AudioDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
             }
         }
         if (!temp.renameTo(destination)) error("Unable to save offline audio")
-        val database = Room.databaseBuilder(applicationContext, NavaDatabase::class.java, "nava.db").build()
+        val database = Room.databaseBuilder(applicationContext, NavaDatabase::class.java, "nava.db")
+            .addMigrations(NavaDatabase.MIGRATION_1_2, NavaDatabase.MIGRATION_2_3)
+            .build()
         database.offlineTrackDao().upsert(
             OfflineTrackEntity(
                 trackId = trackId,

@@ -35,6 +35,19 @@
     <string name="search_start_title">دوست دارید چه چیزی بشنوید؟</string>
     <string name="search_start_subtitle">برای شروع، نام آهنگ یا هنرمند را وارد کنید.</string>
     <string name="search_results_count">%1$d نتیجه</string>
+    <string name="recent_searches">جستجوهای اخیر</string>
+    <string name="clear_search_history">حذف همه</string>
+    <string name="remove_search_history">حذف %1$s از تاریخچه جستجو</string>
+    <string name="search_history_hint">جستجوهای اخیر شما روی این دستگاه ذخیره می‌شوند.</string>
+    <string name="filter_result_type">نوع نتیجه</string>
+    <string name="filter_language">زبان</string>
+    <string name="filter_tracks">آهنگ‌ها</string>
+    <string name="filter_artists">خواننده‌ها</string>
+    <string name="filter_genres">ژانرها</string>
+    <string name="artist_result_tracks">%1$d آهنگ مطابق</string>
+    <string name="genre_result_tracks">%1$d آهنگ در این نتایج</string>
+    <string name="search_artist">جستجوی آهنگ‌های %1$s</string>
+    <string name="search_genre">جستجوی موسیقی %1$s</string>
     <string name="clear_search">پاک کردن جستجو</string>
     <string name="play_track">پخش %1$s</string>
     <string name="track_more_options">گزینه‌های بیشتر برای %1$s</string>
@@ -140,6 +153,7 @@
     <string name="playback_speed_value">سرعت %1$s×</string>
     <string name="sleep_timer_off">تایمر خواب خاموش</string>
     <string name="sleep_timer_minutes">توقف پس از %1$d دقیقه</string>
+    <string name="sleep_timer_compact">%1$dد</string>
     <string name="playback_unavailable">این آهنگ فعلاً قابل پخش نیست. بارگذاری فایل صوتی آن را بررسی کنید و دوباره تلاش کنید.</string>
     <string name="playback_channel_name">پخش موسیقی</string>
     <string name="sleep_15">توقف پس از ۱۵ دقیقه</string><string name="sleep_30">توقف پس از ۳۰ دقیقه</string><string name="close">بستن</string>

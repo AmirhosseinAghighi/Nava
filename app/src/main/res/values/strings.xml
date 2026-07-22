@@ -35,6 +35,19 @@
     <string name="search_start_title">What do you want to hear?</string>
     <string name="search_start_subtitle">Type a track or artist name to start exploring.</string>
     <string name="search_results_count">%1$d results</string>
+    <string name="recent_searches">Recent searches</string>
+    <string name="clear_search_history">Clear all</string>
+    <string name="remove_search_history">Remove %1$s from search history</string>
+    <string name="search_history_hint">Your recent searches are saved on this device.</string>
+    <string name="filter_result_type">Result type</string>
+    <string name="filter_language">Language</string>
+    <string name="filter_tracks">Tracks</string>
+    <string name="filter_artists">Artists</string>
+    <string name="filter_genres">Genres</string>
+    <string name="artist_result_tracks">%1$d matching tracks</string>
+    <string name="genre_result_tracks">%1$d tracks in these results</string>
+    <string name="search_artist">Search songs by %1$s</string>
+    <string name="search_genre">Search %1$s music</string>
     <string name="clear_search">Clear search</string>
     <string name="play_track">Play %1$s</string>
     <string name="track_more_options">More options for %1$s</string>
@@ -140,6 +153,7 @@
     <string name="playback_speed_value">%1$s× speed</string>
     <string name="sleep_timer_off">Sleep timer off</string>
     <string name="sleep_timer_minutes">Sleep in %1$d min</string>
+    <string name="sleep_timer_compact">%1$dm</string>
     <string name="playback_unavailable">This track cannot be played right now. Check that its audio file is uploaded and try again.</string>
     <string name="playback_channel_name">Music playback</string>
     <string name="sleep_15">Sleep 15 min</string><string name="sleep_30">Sleep 30 min</string><string name="close">Close</string>

@@ -176,6 +176,9 @@ import com.example.nava.ui.home.HomeUiState
 import com.example.nava.ui.home.HomeQuickViewModel
 import com.example.nava.ui.home.HomeViewModel
 import com.example.nava.ui.search.SearchViewModel
+import com.example.nava.ui.search.SearchArtistResult
+import com.example.nava.ui.search.SearchGenreResult
+import com.example.nava.ui.search.SearchResultFilter
 import com.example.nava.ui.library.LibraryUiState
 import com.example.nava.ui.library.LibraryViewModel
 import com.example.nava.ui.library.LikesViewModel
@@ -186,6 +189,7 @@ import com.example.nava.ui.downloads.DownloadUiError
 import com.example.nava.ui.downloads.DownloadsUiState
 import com.example.nava.data.downloads.OfflineTrackEntity
 import com.example.nava.ui.profile.ProfileViewModel
+import com.example.nava.ui.profile.ProfileUiState
 import com.example.nava.ui.social.SocialViewModel
 import com.example.nava.ui.social.PublicPlaylist
 import com.example.nava.ui.social.SocialProfileDetails
@@ -240,6 +244,47 @@ private fun NavaTopBarBrand() {
 }
 
 @Composable
+private fun TopBarProfileAvatar(
+    state: ProfileUiState,
+    onClick: () -> Unit,
+) {
+    val avatarModel = state.pendingAvatarUri ?: state.avatarUrl
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .padding(start = NavaSpacing.Sm)
+            .size(44.dp)
+            .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        shadowElevation = NavaSpacing.Xs,
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize().padding(2.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            when {
+                avatarModel != null -> UserAvatar(
+                    model = avatarModel,
+                    contentDescription = stringResource(R.string.profile),
+                    modifier = Modifier.fillMaxSize(),
+                )
+                state.isLoading -> CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
+                )
+                else -> Icon(
+                    Icons.Outlined.AccountCircle,
+                    contentDescription = stringResource(R.string.profile),
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun NavaAppShell(
     session: AuthSession,
@@ -261,6 +306,7 @@ fun NavaAppShell(
     val profileViewModel: ProfileViewModel = hiltViewModel(key = "profile:${session.userId}")
     val socialViewModel: SocialViewModel = hiltViewModel(key = "social:${session.userId}")
     val libraryViewModel: LibraryViewModel = hiltViewModel(key = "library:${session.userId}")
+    val searchViewModel: SearchViewModel = hiltViewModel(key = "search:${session.userId}")
     val nowPlaying by playbackViewModel.nowPlaying.collectAsState()
     val playbackSpeed by playbackViewModel.playbackSpeed.collectAsState()
     val sleepTimerMinutes by playbackViewModel.sleepTimerMinutes.collectAsState()
@@ -273,6 +319,7 @@ fun NavaAppShell(
     val likesState by likesViewModel.state.collectAsState()
     val chatState by chatViewModel.state.collectAsState()
     val libraryState by libraryViewModel.state.collectAsState()
+    val profileState by profileViewModel.state.collectAsState()
     BackHandler(enabled = settingsOpen) {
         settingsOpen = false
     }
@@ -315,6 +362,14 @@ fun NavaAppShell(
                         IconButton(onClick = { settingsOpen = true }) {
                             Icon(Icons.Outlined.Settings, contentDescription = stringResource(R.string.open_settings))
                         }
+                        TopBarProfileAvatar(
+                            state = profileState,
+                            onClick = {
+                                selectedIndex = 4
+                                settingsOpen = false
+                                socialOpen = false
+                            },
+                        )
                     }
                 },
             )
@@ -376,6 +431,7 @@ fun NavaAppShell(
                     playerExpanded = true
                 },
                 onTrackOptions = { queueCandidate = it },
+                viewModel = searchViewModel,
             )
             selectedIndex == 2 -> DownloadsShell(
                 modifier = Modifier.padding(padding),
@@ -1194,7 +1250,21 @@ private fun PlayerHeader(
                 selected = sleepTimerMinutes != null,
                 onClick = onCycleSleepTimer,
             ) {
-                Icon(Icons.Outlined.Timer, contentDescription = null, modifier = Modifier.size(NavaSpacing.Xl))
+                if (sleepTimerMinutes == null) {
+                    Icon(Icons.Outlined.Timer, contentDescription = null, modifier = Modifier.size(NavaSpacing.Xl))
+                } else {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Icon(Icons.Outlined.Timer, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Text(
+                            stringResource(R.string.sleep_timer_compact, sleepTimerMinutes),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
             }
             PlayerTopActionButton(
                 contentDescription = stringResource(R.string.share_track),
@@ -1327,32 +1397,46 @@ private fun PlayerLibraryActions(
     onAddToPlaylist: () -> Unit,
     onDownload: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.Top,
+    val panelShape = MaterialTheme.shapes.extraLarge
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .55f),
+                shape = panelShape,
+            ),
+        shape = panelShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .58f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
-        PlayerRoundActionButton(
-            icon = if (isLiked) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
-            label = stringResource(if (isLiked) R.string.liked else R.string.like_song),
-            onClick = onToggleLike,
-            selected = isLiked,
-            modifier = Modifier.weight(1f),
-        )
-        PlayerRoundActionButton(
-            icon = Icons.Outlined.PlaylistAdd,
-            label = stringResource(R.string.add_to_playlist),
-            onClick = onAddToPlaylist,
-            primary = true,
-            modifier = Modifier.weight(1f),
-        )
-        PlayerDownloadAction(
-            isDownloaded = isDownloaded,
-            isDownloading = isDownloading,
-            progressPercent = downloadProgressPercent,
-            onClick = onDownload,
-            modifier = Modifier.weight(1f),
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = NavaSpacing.Sm, vertical = NavaSpacing.Sm),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.Top,
+        ) {
+            PlayerRoundActionButton(
+                icon = if (isLiked) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
+                label = stringResource(if (isLiked) R.string.liked else R.string.like_song),
+                onClick = onToggleLike,
+                selected = isLiked,
+                modifier = Modifier.weight(1f),
+            )
+            PlayerRoundActionButton(
+                icon = Icons.Outlined.PlaylistAdd,
+                label = stringResource(R.string.add_to_playlist),
+                onClick = onAddToPlaylist,
+                primary = true,
+                modifier = Modifier.weight(1f),
+            )
+            PlayerDownloadAction(
+                isDownloaded = isDownloaded,
+                isDownloading = isDownloading,
+                progressPercent = downloadProgressPercent,
+                onClick = onDownload,
+                modifier = Modifier.weight(1f),
+            )
+        }
     }
 }
 
@@ -1372,7 +1456,7 @@ private fun PlayerRoundActionButton(
     ) {
         Surface(
             onClick = onClick,
-            modifier = Modifier.size(if (primary) 70.dp else 62.dp),
+            modifier = Modifier.size(if (primary) 48.dp else 44.dp),
             shape = CircleShape,
             color = when {
                 primary -> MaterialTheme.colorScheme.primary
@@ -1386,12 +1470,12 @@ private fun PlayerRoundActionButton(
             },
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(icon, contentDescription = label, modifier = Modifier.size(if (primary) 30.dp else NavaSpacing.Xl))
+                Icon(icon, contentDescription = label, modifier = Modifier.size(if (primary) 24.dp else 22.dp))
             }
         }
         Text(
             label,
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
             maxLines = 2,
@@ -1429,9 +1513,9 @@ private fun PlayerDownloadAction(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs),
     ) {
-        Box(modifier = Modifier.size(70.dp), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
             Canvas(modifier = Modifier.fillMaxSize()) {
-                val strokeWidth = 4.dp.toPx()
+                val strokeWidth = 3.dp.toPx()
                 drawCircle(
                     color = ringTrackColor,
                     style = Stroke(width = strokeWidth),
@@ -1450,7 +1534,7 @@ private fun PlayerDownloadAction(
             Surface(
                 onClick = onClick,
                 enabled = !isDownloaded && !isDownloading,
-                modifier = Modifier.size(58.dp),
+                modifier = Modifier.size(40.dp),
                 shape = CircleShape,
                 color = if (isDownloaded) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
                 contentColor = if (isDownloaded) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
@@ -1459,14 +1543,14 @@ private fun PlayerDownloadAction(
                     Icon(
                         if (isDownloaded) Icons.Outlined.DownloadDone else Icons.Outlined.Download,
                         contentDescription = label,
-                        modifier = Modifier.size(NavaSpacing.Xl),
+                        modifier = Modifier.size(21.dp),
                     )
                 }
             }
         }
         Text(
             label,
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
             maxLines = 2,
@@ -2302,18 +2386,20 @@ private fun SearchShell(
     Column(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.padding(horizontal = NavaSpacing.Lg, vertical = NavaSpacing.Md),
-            verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+            verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
         ) {
-            Text(
-                text = stringResource(R.string.search_title),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = stringResource(R.string.search_subtitle),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
+                Text(
+                    text = stringResource(R.string.search_title),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = stringResource(R.string.search_subtitle),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             OutlinedTextField(
                 value = state.query,
                 onValueChange = viewModel::updateQuery,
@@ -2329,10 +2415,62 @@ private fun SearchShell(
                 singleLine = true,
                 shape = MaterialTheme.shapes.large,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                keyboardActions = KeyboardActions(onSearch = {
+                    viewModel.submitSearch()
+                    focusManager.clearFocus()
+                }),
                 modifier = Modifier.fillMaxWidth(),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+            Column(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
+                Text(
+                    stringResource(R.string.filter_result_type),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                    item {
+                        SearchFilterChip(
+                            selected = state.resultFilter == SearchResultFilter.All,
+                            label = R.string.filter_all,
+                            icon = Icons.Outlined.ManageSearch,
+                            onClick = { viewModel.setResultFilter(SearchResultFilter.All) },
+                        )
+                    }
+                    item {
+                        SearchFilterChip(
+                            selected = state.resultFilter == SearchResultFilter.Tracks,
+                            label = R.string.filter_tracks,
+                            icon = Icons.Outlined.MusicNote,
+                            onClick = { viewModel.setResultFilter(SearchResultFilter.Tracks) },
+                        )
+                    }
+                    item {
+                        SearchFilterChip(
+                            selected = state.resultFilter == SearchResultFilter.Artists,
+                            label = R.string.filter_artists,
+                            icon = Icons.Outlined.AccountCircle,
+                            onClick = { viewModel.setResultFilter(SearchResultFilter.Artists) },
+                        )
+                    }
+                    item {
+                        SearchFilterChip(
+                            selected = state.resultFilter == SearchResultFilter.Genres,
+                            label = R.string.filter_genres,
+                            icon = Icons.Outlined.QueueMusic,
+                            onClick = { viewModel.setResultFilter(SearchResultFilter.Genres) },
+                        )
+                    }
+                }
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+            ) {
+                Text(
+                    stringResource(R.string.filter_language),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 SearchFilterChip(
                     selected = state.language == null,
                     label = R.string.filter_all,
@@ -2351,12 +2489,18 @@ private fun SearchShell(
             }
         }
         when {
-            state.query.isBlank() -> SearchMessage(
-                title = stringResource(R.string.search_start_title),
-                body = stringResource(R.string.search_start_subtitle),
+            state.query.isBlank() -> SearchHistoryContent(
+                history = state.history,
+                onSelect = {
+                    focusManager.clearFocus()
+                    viewModel.selectHistory(it)
+                },
+                onRemove = viewModel::removeHistory,
+                onClear = viewModel::clearHistory,
+                modifier = Modifier.weight(1f),
             )
             state.loading && state.results.isEmpty() -> Box(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentAlignment = Alignment.Center,
             ) { CircularProgressIndicator() }
             state.failed -> SearchMessage(
@@ -2364,7 +2508,7 @@ private fun SearchShell(
                 body = stringResource(R.string.search_error_hint),
                 action = { Button(onClick = viewModel::retry) { Text(stringResource(R.string.retry)) } },
             )
-            state.results.isEmpty() -> SearchMessage(
+            state.visibleResultCount == 0 -> SearchMessage(
                 title = stringResource(R.string.search_empty),
                 body = stringResource(R.string.search_empty_hint),
             )
@@ -2380,26 +2524,38 @@ private fun SearchShell(
             ) {
                 item {
                     Text(
-                        text = stringResource(R.string.search_results_count, state.results.size),
+                        text = stringResource(R.string.search_results_count, state.visibleResultCount),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = NavaSpacing.Xs),
                     )
                 }
                 if (state.loading) item { LinearProgressIndicator(modifier = Modifier.fillMaxWidth()) }
-                items(state.results, key = SearchTrack::id) { track ->
-                    SearchTrackRow(
-                        track = track,
-                        isCurrent = track.id == currentTrackId,
-                        onClick = {
-                            focusManager.clearFocus()
-                            onTrackClick(track.toHomeTrack())
-                        },
-                        onOptions = {
-                            focusManager.clearFocus()
-                            onTrackOptions(track.toHomeTrack())
-                        },
-                    )
+                when (state.resultFilter) {
+                    SearchResultFilter.All, SearchResultFilter.Tracks -> {
+                        items(state.results, key = SearchTrack::id) { track ->
+                            SearchTrackRow(
+                                track = track,
+                                isCurrent = track.id == currentTrackId,
+                                onClick = {
+                                    viewModel.submitSearch()
+                                    focusManager.clearFocus()
+                                    onTrackClick(track.toHomeTrack())
+                                },
+                                onOptions = {
+                                    viewModel.submitSearch()
+                                    focusManager.clearFocus()
+                                    onTrackOptions(track.toHomeTrack())
+                                },
+                            )
+                        }
+                    }
+                    SearchResultFilter.Artists -> items(state.artists, key = SearchArtistResult::name) { artist ->
+                        SearchArtistRow(artist = artist, onClick = { viewModel.selectSuggestion(artist.name) })
+                    }
+                    SearchResultFilter.Genres -> items(state.genres, key = SearchGenreResult::name) { genre ->
+                        SearchGenreRow(genre = genre, onClick = { viewModel.selectSuggestion(genre.name) })
+                    }
                 }
                 if (state.canLoadMore) item {
                     LaunchedEffect(state.results.size) { viewModel.loadMore() }
@@ -2414,10 +2570,162 @@ private fun SearchShell(
 }
 
 @Composable
-private fun SearchFilterChip(selected: Boolean, @StringRes label: Int, onClick: () -> Unit) {
+private fun SearchHistoryContent(
+    history: List<String>,
+    onSelect: (String) -> Unit,
+    onRemove: (String) -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (history.isEmpty()) {
+        SearchMessage(
+            title = stringResource(R.string.search_start_title),
+            body = stringResource(R.string.search_start_subtitle),
+        )
+        return
+    }
+    LazyColumn(
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            start = NavaSpacing.Lg,
+            end = NavaSpacing.Lg,
+            top = NavaSpacing.Sm,
+            bottom = NavaSpacing.Xl,
+        ),
+        verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+    ) {
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.recent_searches), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text(
+                        stringResource(R.string.search_history_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                FilledTonalButton(onClick = onClear) {
+                    Icon(Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(NavaSpacing.Xs))
+                    Text(stringResource(R.string.clear_search_history))
+                }
+            }
+        }
+        items(history, key = { it.lowercase() }) { query ->
+            Surface(
+                onClick = { onSelect(query) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                shadowElevation = NavaSpacing.Xs,
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = NavaSpacing.Md, top = NavaSpacing.Xs, bottom = NavaSpacing.Xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+                ) {
+                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer) {
+                        Icon(
+                            Icons.Outlined.History,
+                            contentDescription = null,
+                            modifier = Modifier.padding(NavaSpacing.Sm),
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    }
+                    Text(query, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                    IconButton(onClick = { onRemove(query) }) {
+                        Icon(
+                            Icons.Outlined.Clear,
+                            contentDescription = stringResource(R.string.remove_search_history, query),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchArtistRow(artist: SearchArtistResult, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            AsyncImage(
+                model = artist.coverImageUrl,
+                contentDescription = artist.name,
+                contentScale = ContentScale.Crop,
+                error = painterResource(R.drawable.ic_launcher_foreground),
+                modifier = Modifier.size(68.dp).clip(CircleShape).border(2.dp, MaterialTheme.colorScheme.primary, CircleShape),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(artist.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    stringResource(R.string.artist_result_tracks, artist.trackCount),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Icon(Icons.Outlined.ChevronRight, contentDescription = stringResource(R.string.search_artist, artist.name))
+        }
+    }
+}
+
+@Composable
+private fun SearchGenreRow(genre: SearchGenreResult, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            Surface(modifier = Modifier.size(58.dp), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.primary) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Outlined.QueueMusic, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
+                }
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(genre.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    stringResource(R.string.genre_result_tracks, genre.trackCount),
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Icon(Icons.Outlined.ChevronRight, contentDescription = stringResource(R.string.search_genre, genre.name))
+        }
+    }
+}
+
+@Composable
+private fun SearchFilterChip(
+    selected: Boolean,
+    @StringRes label: Int,
+    icon: ImageVector? = null,
+    onClick: () -> Unit,
+) {
     FilterChip(
         selected = selected,
         onClick = onClick,
+        leadingIcon = icon?.let { imageVector ->
+            { Icon(imageVector, contentDescription = null, modifier = Modifier.size(18.dp)) }
+        },
         label = {
             Text(
                 text = stringResource(label),
