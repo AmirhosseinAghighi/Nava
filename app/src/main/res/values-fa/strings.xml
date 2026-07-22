@@ -43,6 +43,7 @@
     <string name="library_title">کتابخانه شما</string><string name="liked_count">آهنگ‌های پسندیده: %1$d</string><string name="like_song">پسندیدن</string><string name="unlike_song">حذف پسند</string><string name="liked_songs_empty">هنوز آهنگی را نپسندیده‌اید.</string><string name="library_empty">برای ساخت کتابخانه، پلی‌لیست بسازید یا آهنگی را بپسندید.</string><string name="library_error">بارگیری کتابخانه انجام نشد.</string>
     <string name="profile">پروفایل</string>
     <string name="home_welcome">خوش آمدید</string>
+    <string name="home_welcome_subtitle">حال‌وهوایتان را انتخاب کنید، ادامه‌اش با نوا.</string>
     <string name="shell_placeholder">این بخش برای قابلیت بعدی آماده است.</string>
     <string name="settings">تنظیمات</string>
     <string name="theme">پوسته</string>
@@ -108,6 +109,8 @@
     <string name="home_global">پلی‌لیست‌های جهانی</string>
     <string name="home_local">پلی‌لیست‌های محلی</string>
     <string name="home_carousel_caption">صداهای تازه از کاتالوگ نوا</string>
+    <string name="track_artwork">کاور %1$s</string>
+    <string name="featured_badge">پیشنهاد ویژه</string>
     <string name="home_load_error">فعلاً کاتالوگ بارگیری نشد.</string>
     <string name="retry">تلاش دوباره</string>
 </resources>

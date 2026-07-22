@@ -43,6 +43,7 @@
     <string name="library_title">Your library</string><string name="liked_count">Liked songs: %1$d</string><string name="like_song">Like</string><string name="unlike_song">Unlike</string><string name="liked_songs_empty">You have not liked any songs yet.</string><string name="library_empty">Create a playlist or like a track to build your library.</string><string name="library_error">Your library could not be loaded.</string>
     <string name="profile">Profile</string>
     <string name="home_welcome">Good to have you here</string>
+    <string name="home_welcome_subtitle">Pick a mood and let Nava handle the rest.</string>
     <string name="shell_placeholder">This area is ready for the next feature.</string>
     <string name="settings">Settings</string>
     <string name="theme">Theme</string>
@@ -108,6 +109,8 @@
     <string name="home_global">Global playlists</string>
     <string name="home_local">Local playlists</string>
     <string name="home_carousel_caption">Fresh sounds from the Nava catalog</string>
+    <string name="track_artwork">Artwork for %1$s</string>
+    <string name="featured_badge">Featured</string>
     <string name="home_load_error">We could not load the catalog right now.</string>
     <string name="retry">Try again</string>
 </resources>

@@ -48,6 +48,8 @@ class PlaybackViewModel @Inject constructor(
     val playbackSpeed: StateFlow<Float> = _playbackSpeed.asStateFlow()
     private val _sleepTimerMinutes = MutableStateFlow<Long?>(null)
     val sleepTimerMinutes: StateFlow<Long?> = _sleepTimerMinutes.asStateFlow()
+    private val _fftBands = MutableStateFlow(FloatArray(FFT_BAND_COUNT))
+    val fftBands: StateFlow<FloatArray> = _fftBands.asStateFlow()
     private var shuffleSource: List<HomeTrack> = emptyList()
     private val playbackHistory = mutableListOf<HomeTrack>()
     private var sleepTimerResetJob: Job? = null
@@ -59,6 +61,10 @@ class PlaybackViewModel @Inject constructor(
                 NavaPlaybackService.ACTION_SKIP_NEXT -> skipToNext()
                 NavaPlaybackService.ACTION_SKIP_PREVIOUS -> skipToPrevious()
                 NavaPlaybackService.ACTION_PLAYBACK_STATE -> updatePlaybackState(intent)
+                NavaPlaybackService.ACTION_FFT_DATA -> intent
+                    .getFloatArrayExtra(NavaPlaybackService.EXTRA_FFT_BANDS)
+                    ?.takeIf { it.size == FFT_BAND_COUNT }
+                    ?.let { _fftBands.value = it }
             }
         }
 
@@ -93,6 +99,7 @@ class PlaybackViewModel @Inject constructor(
                 addAction(NavaPlaybackService.ACTION_PLAYBACK_STATE)
                 addAction(NavaPlaybackService.ACTION_SKIP_NEXT)
                 addAction(NavaPlaybackService.ACTION_SKIP_PREVIOUS)
+                addAction(NavaPlaybackService.ACTION_FFT_DATA)
             },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
@@ -245,6 +252,7 @@ class PlaybackViewModel @Inject constructor(
     private companion object {
         const val PROGRESS_REPORT_INTERVAL_MS = 30_000L
         const val RESTART_POSITION_MS = 5_000L
+        const val FFT_BAND_COUNT = 28
         val SPEED_OPTIONS = listOf(0.75f, 1f, 1.25f, 1.5f, 2f)
         val SLEEP_TIMER_OPTIONS = listOf<Long?>(null, 15L, 30L, 45L, 60L)
     }

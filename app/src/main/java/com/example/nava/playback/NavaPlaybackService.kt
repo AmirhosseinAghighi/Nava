@@ -4,6 +4,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Bundle
@@ -16,13 +17,19 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
+import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.TeeAudioProcessor
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.MediaStyleNotificationHelper
@@ -35,9 +42,12 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import java.io.File
 
+@UnstableApi
 class NavaPlaybackService : MediaSessionService() {
     private lateinit var player: ExoPlayer
     private lateinit var cache: SimpleCache
+    private val fftAnalyzer = PlaybackFftAnalyzer(::publishFftBands)
+    private val fftAudioProcessor = TeeAudioProcessor(fftAnalyzer)
     private var session: MediaSession? = null
     private var currentTitle: String? = null
     private var currentArtist: String? = null
@@ -86,6 +96,7 @@ class NavaPlaybackService : MediaSessionService() {
             updatePlaybackNotification()
             stateHandler.removeCallbacks(stateTicker)
             if (isPlaying) stateHandler.post(stateTicker)
+            else publishFftBands(FloatArray(FFT_BAND_COUNT))
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -106,7 +117,18 @@ class NavaPlaybackService : MediaSessionService() {
         val sourceFactory = CacheDataSource.Factory()
             .setCache(cache)
             .setUpstreamDataSourceFactory(DefaultDataSource.Factory(this))
-        player = ExoPlayer.Builder(this)
+        val renderersFactory = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean,
+            ): AudioSink = DefaultAudioSink.Builder(context)
+                .setEnableFloatOutput(false)
+                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                .setAudioProcessors(arrayOf<AudioProcessor>(fftAudioProcessor))
+                .build()
+        }
+        player = ExoPlayer.Builder(this, renderersFactory)
             .setMediaSourceFactory(DefaultMediaSourceFactory(sourceFactory))
             .build()
             .apply {
@@ -178,6 +200,7 @@ class NavaPlaybackService : MediaSessionService() {
         session?.run { player.release(); release() }
         session = null
         cache.release()
+        fftAnalyzer.release()
         stopForeground(Service.STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
@@ -257,6 +280,14 @@ class NavaPlaybackService : MediaSessionService() {
         )
     }
 
+    private fun publishFftBands(bands: FloatArray) {
+        sendBroadcast(
+            Intent(ACTION_FFT_DATA)
+                .setPackage(packageName)
+                .putExtra(EXTRA_FFT_BANDS, bands),
+        )
+    }
+
     companion object {
         const val ACTION_PLAY_URI = "com.example.nava.playback.PLAY_URI"
         const val ACTION_PAUSE = "com.example.nava.playback.PAUSE"
@@ -267,6 +298,7 @@ class NavaPlaybackService : MediaSessionService() {
         const val ACTION_NEXT = "com.example.nava.playback.NEXT"
         const val ACTION_PREVIOUS = "com.example.nava.playback.PREVIOUS"
         const val ACTION_PLAYBACK_STATE = "com.example.nava.playback.STATE_CHANGED"
+        const val ACTION_FFT_DATA = "com.example.nava.playback.FFT_DATA"
         const val ACTION_SKIP_NEXT = "com.example.nava.playback.SKIP_NEXT"
         const val ACTION_SKIP_PREVIOUS = "com.example.nava.playback.SKIP_PREVIOUS"
         const val SESSION_COMMAND_NEXT = "com.example.nava.playback.SESSION_NEXT"
@@ -280,10 +312,12 @@ class NavaPlaybackService : MediaSessionService() {
         const val EXTRA_PLAYING = "playing"
         const val EXTRA_PLAYBACK_STATE = "playback_state"
         const val EXTRA_ERROR = "error"
+        const val EXTRA_FFT_BANDS = "fft_bands"
         const val EXTRA_SPEED = "speed"
         const val EXTRA_SLEEP_MS = "sleep_ms"
         private const val STATE_TICK_INTERVAL_MS = 1_000L
         private const val PLAYBACK_CHANNEL_ID = "nava_playback"
         private const val PLAYBACK_NOTIFICATION_ID = 1001
+        private const val FFT_BAND_COUNT = 28
     }
 }

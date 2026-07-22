@@ -8,9 +8,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -18,6 +15,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
@@ -36,6 +34,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -43,7 +42,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.ManageSearch
 import androidx.compose.material.icons.outlined.NotificationsNone
@@ -104,6 +106,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.palette.graphics.Palette
@@ -117,7 +121,9 @@ import com.example.nava.domain.preferences.FontScale
 import com.example.nava.domain.preferences.ThemeMode
 import com.example.nava.domain.preferences.UserPreferences
 import com.example.nava.ui.theme.NavaDimensions
+import com.example.nava.ui.theme.NavaBlack
 import com.example.nava.ui.theme.NavaSpacing
+import com.example.nava.ui.theme.NavaWhite
 import com.example.nava.ui.home.HomeUiState
 import com.example.nava.ui.home.HomeViewModel
 import com.example.nava.ui.search.SearchViewModel
@@ -137,9 +143,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.text.DecimalFormat
-import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.sin
 
 private data class NavItem(@StringRes val title: Int, val icon: ImageVector)
 
@@ -150,6 +154,31 @@ private val navigationItems = listOf(
     NavItem(R.string.playlists, Icons.Outlined.QueueMusic),
     NavItem(R.string.profile, Icons.Outlined.AccountCircle),
 )
+
+@Composable
+private fun NavaTopBarBrand() {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+    ) {
+        Surface(
+            modifier = Modifier.size(NavaDimensions.HomeTopBarLogoSize),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primary,
+        ) {
+            Image(
+                painter = painterResource(R.drawable.ic_launcher_foreground),
+                contentDescription = stringResource(R.string.auth_logo_content_description),
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        Text(
+            text = stringResource(R.string.top_bar_brand),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -169,13 +198,17 @@ fun NavaAppShell(
     val nowPlaying by playbackViewModel.nowPlaying.collectAsState()
     val playbackSpeed by playbackViewModel.playbackSpeed.collectAsState()
     val sleepTimerMinutes by playbackViewModel.sleepTimerMinutes.collectAsState()
+    val fftBands by playbackViewModel.fftBands.collectAsState()
     val playbackError by playbackViewModel.playbackError.collectAsState()
     val downloadState by downloadViewModel.state.collectAsState()
     val downloadError by downloadViewModel.downloadError.collectAsState()
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(if (settingsOpen) R.string.settings else R.string.top_bar_brand), style = MaterialTheme.typography.titleLarge) },
+                title = {
+                    if (settingsOpen) Text(stringResource(R.string.settings), style = MaterialTheme.typography.titleLarge)
+                    else NavaTopBarBrand()
+                },
                 actions = {
                     IconButton(onClick = {}) {
                         Icon(Icons.Outlined.NotificationsNone, contentDescription = stringResource(R.string.notification))
@@ -234,6 +267,7 @@ fun NavaAppShell(
                 nowPlaying = now,
                 playbackSpeed = playbackSpeed,
                 sleepTimerMinutes = sleepTimerMinutes,
+                fftBands = fftBands,
                 onDismiss = { playerExpanded = false },
                 onToggle = { if (now.playing) playbackViewModel.pause() else playbackViewModel.resume() },
                 onSeek = playbackViewModel::seekTo,
@@ -313,25 +347,51 @@ fun NavaAppShell(
 
 @Composable
 private fun MiniPlayer(nowPlaying: NowPlaying, onToggle: () -> Unit, onOpen: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth(), onClick = onOpen) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = NavaSpacing.Lg, vertical = NavaSpacing.Sm),
+        onClick = onOpen,
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        elevation = CardDefaults.cardElevation(defaultElevation = NavaSpacing.Xs),
+    ) {
         Row(modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Md), verticalAlignment = Alignment.CenterVertically) {
             AsyncImage(
                 model = nowPlaying.track.coverImageUrl,
                 contentDescription = stringResource(R.string.now_playing_artwork),
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .size(NavaSpacing.Xxl)
+                    .size(NavaDimensions.MiniPlayerArtworkSize)
                     .clip(MaterialTheme.shapes.medium),
             )
             Column(modifier = Modifier.weight(1f).padding(start = NavaSpacing.Sm)) {
-                Text(nowPlaying.track.title, style = MaterialTheme.typography.titleMedium)
-                Text(nowPlaying.track.artistName, style = MaterialTheme.typography.bodyMedium)
-            }
-            IconButton(onClick = onToggle) {
-                Icon(
-                    if (nowPlaying.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
-                    contentDescription = stringResource(if (nowPlaying.playing) R.string.pause_playback else R.string.resume_playback),
+                Text(
+                    nowPlaying.track.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
                 )
+                Text(
+                    nowPlaying.track.artistName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+            Surface(
+                onClick = onToggle,
+                modifier = Modifier.size(NavaDimensions.PlayerSecondaryControlSize),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        if (nowPlaying.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
+                        contentDescription = stringResource(if (nowPlaying.playing) R.string.pause_playback else R.string.resume_playback),
+                    )
+                }
             }
         }
     }
@@ -342,6 +402,7 @@ private fun FullPlayer(
     nowPlaying: NowPlaying,
     playbackSpeed: Float,
     sleepTimerMinutes: Long?,
+    fftBands: FloatArray,
     onDismiss: () -> Unit,
     onToggle: () -> Unit,
     onSeek: (Long) -> Unit,
@@ -457,7 +518,7 @@ private fun FullPlayer(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    EqualizerVisualizer(isPlaying = nowPlaying.playing)
+                    EqualizerVisualizer(bands = fftBands, isPlaying = nowPlaying.playing)
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Slider(
                             value = scrubPosition.coerceIn(0f, durationMs.toFloat()),
@@ -612,24 +673,15 @@ private fun PlayerUtilityButton(
 }
 
 @Composable
-private fun EqualizerVisualizer(isPlaying: Boolean) {
-    val transition = rememberInfiniteTransition(label = "equalizer")
-    val phase by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = (2f * PI).toFloat(),
-        animationSpec = infiniteRepeatable(tween(NavaMotion.Slow * 4, easing = LinearEasing)),
-        label = "equalizer_phase",
-    )
+private fun EqualizerVisualizer(bands: FloatArray, isPlaying: Boolean) {
     val barColor = MaterialTheme.colorScheme.primary
     Canvas(modifier = Modifier.fillMaxWidth().height(NavaDimensions.PlayerVisualizerHeight)) {
-        val barCount = 28
+        val barCount = bands.size.coerceAtLeast(1)
         val slotWidth = size.width / barCount
         val barWidth = slotWidth * .46f
         repeat(barCount) { index ->
-            val normalizedIndex = index.toFloat() / (barCount - 1)
-            val envelope = .42f + sin(normalizedIndex * PI).toFloat() * .58f
-            val wave = ((sin((if (isPlaying) phase else 0f) + index * .68f) + 1f) / 2f)
-            val level = if (isPlaying) .16f + wave * .78f * envelope else .12f + envelope * .12f
+            val spectrumLevel = bands.getOrElse(index) { 0f }.coerceIn(0f, 1f)
+            val level = if (isPlaying) .08f + spectrumLevel * .9f else .08f
             val barHeight = size.height * level
             drawRoundRect(
                 color = barColor,
@@ -774,7 +826,23 @@ private fun HomeShell(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xl),
     ) {
-        item { Text(stringResource(R.string.home_welcome), modifier = Modifier.padding(horizontal = NavaSpacing.Lg), style = MaterialTheme.typography.headlineSmall) }
+        item {
+            Column(
+                modifier = Modifier.padding(horizontal = NavaSpacing.Lg),
+                verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs),
+            ) {
+                Text(
+                    stringResource(R.string.home_welcome),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    stringResource(R.string.home_welcome_subtitle),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         when (val current = state) {
             HomeUiState.Loading -> item { HomeLoading() }
             HomeUiState.Error -> item { HomeError(onRetry = viewModel::reload) }
@@ -789,6 +857,14 @@ private fun androidx.compose.foundation.lazy.LazyListScope.homeContent(
     onQueue: (HomeTrack) -> Unit,
 ) {
     item {
+        Text(
+            text = stringResource(R.string.home_featured),
+            modifier = Modifier.padding(horizontal = NavaSpacing.Lg),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+    item {
         LazyRow(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NavaSpacing.Lg),
             horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
@@ -799,12 +875,12 @@ private fun androidx.compose.foundation.lazy.LazyListScope.homeContent(
     item {
         LazyRow(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NavaSpacing.Lg),
-            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
         ) {
-            item { QuickAction(R.string.quick_liked) }
-            item { QuickAction(R.string.quick_recent) }
-            item { QuickAction(R.string.quick_playlists) }
-            item { QuickAction(R.string.quick_artists) }
+            item { QuickAction(R.string.quick_liked, Icons.Outlined.FavoriteBorder) }
+            item { QuickAction(R.string.quick_recent, Icons.Outlined.History) }
+            item { QuickAction(R.string.quick_playlists, Icons.Outlined.QueueMusic) }
+            item { QuickAction(R.string.quick_artists, Icons.Outlined.Groups) }
         }
     }
     item { DiscoverySection(R.string.home_trending, state.feed.trending, onPlay, onQueue) }
@@ -880,13 +956,48 @@ private fun FeaturedCard(
 ) {
     Card(
         modifier = Modifier
-            .fillMaxWidth()
+            .width(NavaDimensions.HomeFeaturedCardWidth)
+            .height(NavaDimensions.HomeFeaturedCardHeight)
             .combinedClickable(onClick = { onPlay(track) }, onLongClick = { onQueue(track) }),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = MaterialTheme.shapes.large,
+        elevation = CardDefaults.cardElevation(defaultElevation = NavaSpacing.Xs),
     ) {
-        Column(modifier = Modifier.padding(NavaSpacing.Xl), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-            Text(track.title, style = MaterialTheme.typography.titleLarge)
-            Text(track.artistName, style = MaterialTheme.typography.bodyMedium)
+        Box(modifier = Modifier.fillMaxSize()) {
+            AsyncImage(
+                model = track.coverImageUrl,
+                contentDescription = stringResource(R.string.track_artwork, track.title),
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, NavaBlack.copy(alpha = .9f)),
+                        ),
+                    ),
+            )
+            Surface(
+                modifier = Modifier.align(Alignment.TopStart).padding(NavaSpacing.Md),
+                shape = MaterialTheme.shapes.small,
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ) {
+                Text(
+                    stringResource(R.string.featured_badge),
+                    modifier = Modifier.padding(horizontal = NavaSpacing.Md, vertical = NavaSpacing.Xs),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+            Column(
+                modifier = Modifier.align(Alignment.BottomStart).padding(NavaSpacing.Lg),
+                verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs),
+            ) {
+                Text(track.title, style = MaterialTheme.typography.titleLarge, color = NavaWhite, fontWeight = FontWeight.Bold)
+                Text(track.artistName, style = MaterialTheme.typography.bodyMedium, color = NavaWhite.copy(alpha = .82f))
+                Text(stringResource(R.string.home_carousel_caption), style = MaterialTheme.typography.labelMedium, color = NavaWhite.copy(alpha = .7f))
+            }
         }
     }
 }
@@ -899,22 +1010,48 @@ private fun DiscoverySection(
     onQueue: (HomeTrack) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
-        Text(stringResource(title), modifier = Modifier.padding(horizontal = NavaSpacing.Lg), style = MaterialTheme.typography.titleLarge)
+        Text(
+            stringResource(title),
+            modifier = Modifier.padding(horizontal = NavaSpacing.Lg),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
         LazyRow(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NavaSpacing.Lg),
             horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
         ) {
             items(tracks, key = HomeTrack::id) { track ->
                 Card(
-                    modifier = Modifier.combinedClickable(
-                        onClick = { onPlay(track) },
-                        onLongClick = { onQueue(track) },
-                    ),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    modifier = Modifier
+                        .width(NavaDimensions.HomeTrackCardWidth)
+                        .combinedClickable(
+                            onClick = { onPlay(track) },
+                            onLongClick = { onQueue(track) },
+                        ),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    shape = MaterialTheme.shapes.large,
                 ) {
-                    Column(modifier = Modifier.padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-                        Text(track.title, style = MaterialTheme.typography.titleMedium)
-                        Text(track.artistName, style = MaterialTheme.typography.bodyMedium)
+                    Column {
+                        AsyncImage(
+                            model = track.coverImageUrl,
+                            contentDescription = stringResource(R.string.track_artwork, track.title),
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(NavaDimensions.HomeTrackArtworkHeight),
+                        )
+                        Column(
+                            modifier = Modifier.padding(NavaSpacing.Md),
+                            verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs),
+                        ) {
+                            Text(track.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1)
+                            Text(
+                                track.artistName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
             }
@@ -923,8 +1060,39 @@ private fun DiscoverySection(
 }
 
 @Composable
-private fun QuickAction(@StringRes label: Int) {
-    AssistChip(onClick = {}, label = { Text(stringResource(label)) })
+private fun QuickAction(@StringRes label: Int, icon: ImageVector) {
+    Surface(
+        onClick = {},
+        modifier = Modifier
+            .width(NavaDimensions.HomeQuickActionWidth)
+            .height(NavaDimensions.HomeQuickActionHeight),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize().padding(NavaSpacing.Md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            Surface(
+                modifier = Modifier.size(NavaDimensions.HomeTopBarLogoSize),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, contentDescription = null, modifier = Modifier.size(NavaSpacing.Xl))
+                }
+            }
+            Text(
+                text = stringResource(label),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+            )
+        }
+    }
 }
 
 @Composable

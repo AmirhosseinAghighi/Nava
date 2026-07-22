@@ -31,6 +31,14 @@ object NavaDimensions {
     val PlayerVisualizerHeight = 48.dp
     val PlayerSwipeThreshold = 88.dp
     val PlayerArtworkBorderWidth = 2.dp
+    val HomeTopBarLogoSize = 40.dp
+    val HomeFeaturedCardWidth = 286.dp
+    val HomeFeaturedCardHeight = 190.dp
+    val HomeTrackCardWidth = 172.dp
+    val HomeTrackArtworkHeight = 112.dp
+    val HomeQuickActionWidth = 154.dp
+    val HomeQuickActionHeight = 72.dp
+    val MiniPlayerArtworkSize = 48.dp
 }
 
 val NavaShapes = Shapes(
