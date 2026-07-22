@@ -32,7 +32,7 @@ sealed interface NavaUiState {
 
 sealed interface NavaEvent {
     data class SignIn(val email: String, val password: String) : NavaEvent
-    data class SignUp(val email: String, val password: String) : NavaEvent
+    data class SignUp(val displayName: String, val email: String, val password: String) : NavaEvent
     data class SetTheme(val mode: ThemeMode) : NavaEvent
     data class SetLanguage(val language: AppLanguage) : NavaEvent
     data class SetFontScale(val scale: FontScale) : NavaEvent
@@ -41,6 +41,7 @@ sealed interface NavaEvent {
 
 sealed interface NavaEffect {
     data object InvalidCredentials : NavaEffect
+    data object InvalidRegistration : NavaEffect
     data object AuthenticationFailed : NavaEffect
     data object AccountConfirmationSent : NavaEffect
 }
@@ -69,8 +70,9 @@ class NavaViewModel @Inject constructor(
                 operation = { authRepository.signIn(event.email, event.password) },
             )
             is NavaEvent.SignUp -> submitAuthentication(
-                operation = { authRepository.signUp(event.email, event.password) },
+                operation = { authRepository.signUp(event.displayName, event.email, event.password) },
                 successEffect = NavaEffect.AccountConfirmationSent,
+                invalidEffect = NavaEffect.InvalidRegistration,
             )
             is NavaEvent.SetTheme -> preferencesRepository.setThemeMode(event.mode)
             is NavaEvent.SetLanguage -> preferencesRepository.setLanguage(event.language)
@@ -82,6 +84,7 @@ class NavaViewModel @Inject constructor(
     private suspend fun submitAuthentication(
         operation: suspend () -> Result<Unit>,
         successEffect: NavaEffect? = null,
+        invalidEffect: NavaEffect = NavaEffect.InvalidCredentials,
     ) {
         isAuthenticating.value = true
         val result = operation()
@@ -90,7 +93,7 @@ class NavaViewModel @Inject constructor(
             successEffect?.let { effectChannel.send(it) }
         }.onFailure { exception ->
             effectChannel.send(
-                if (exception is IllegalArgumentException) NavaEffect.InvalidCredentials else NavaEffect.AuthenticationFailed,
+                if (exception is IllegalArgumentException) invalidEffect else NavaEffect.AuthenticationFailed,
             )
         }
     }

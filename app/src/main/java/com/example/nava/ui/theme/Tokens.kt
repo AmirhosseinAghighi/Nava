@@ -19,6 +19,20 @@ object NavaMotion {
     const val Slow = 320
 }
 
+object NavaDimensions {
+    val AuthLogoSize = 104.dp
+    val AuthContentMaxWidth = 520.dp
+    val AuthButtonMinHeight = 52.dp
+    val AuthProgressStrokeWidth = 2.dp
+    val PlayerArtworkMaxSize = 300.dp
+    val PlayerPrimaryControlSize = 76.dp
+    val PlayerSecondaryControlSize = 56.dp
+    val PlayerUtilityControlHeight = 52.dp
+    val PlayerVisualizerHeight = 48.dp
+    val PlayerSwipeThreshold = 88.dp
+    val PlayerArtworkBorderWidth = 2.dp
+}
+
 val NavaShapes = Shapes(
     small = RoundedCornerShape(8.dp),
     medium = RoundedCornerShape(12.dp),

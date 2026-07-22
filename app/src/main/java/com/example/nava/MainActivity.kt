@@ -92,7 +92,9 @@ private fun NavaRoot(viewModel: NavaViewModel = hiltViewModel()) {
                 NavaUiState.Loading -> LoadingContent()
                 is NavaUiState.SignedOut -> AuthScreen(
                     onSignIn = { email, password -> viewModel.onEvent(NavaEvent.SignIn(email, password)) },
-                    onSignUp = { email, password -> viewModel.onEvent(NavaEvent.SignUp(email, password)) },
+                    onSignUp = { displayName, email, password ->
+                        viewModel.onEvent(NavaEvent.SignUp(displayName, email, password))
+                    },
                     isAuthenticating = current.isAuthenticating,
                     effects = viewModel.effects,
                 )
