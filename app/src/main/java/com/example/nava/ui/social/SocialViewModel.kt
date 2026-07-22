@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.storage.storage
 import kotlinx.coroutines.Job
@@ -78,8 +79,7 @@ class SocialViewModel @Inject constructor(private val supabase: SupabaseClient) 
                     SocialPayload(people = supabase.postgrest.rpc("get_social_connections", buildJsonObject { put("p_user_id", userId); put("p_kind", if (section == SocialSection.FOLLOWERS) "followers" else "following"); put("p_limit", 30) }).decodeList<ConnectionDto>().map { it.toPerson(signedAvatarUrl(it.avatarPath)) })
                 }
                 SocialSection.PLAYLISTS -> {
-                    val userId = supabase.auth.currentUserOrNull()?.id ?: error("Not signed in")
-                    SocialPayload(playlists = supabase.postgrest.rpc("get_public_playlists", buildJsonObject { put("p_owner_id", userId); put("p_limit", 30) }).decodeList<PlaylistDto>().map { PublicPlaylist(it.id, it.title, it.description, it.ownerName, it.trackCount) })
+                    SocialPayload(playlists = loadTopPlaylists())
                 }
             }
         }.onSuccess { payload -> _state.value = _state.value.copy(people = payload.people, playlists = payload.playlists, loading = false) }
@@ -146,6 +146,26 @@ class SocialViewModel @Inject constructor(private val supabase: SupabaseClient) 
             put("p_limit", 50)
         }).decodeList<PlaylistDto>().map { PublicPlaylist(it.id, it.title, it.description, it.ownerName, it.trackCount) }
 
+    private suspend fun loadTopPlaylists(): List<PublicPlaylist> {
+        val playlists = supabase.from("playlists").select {
+            filter { eq("is_public", true) }
+        }.decodeList<PublicPlaylistRow>()
+        val ownerNames = supabase.from("profiles").select().decodeList<ProfileNameRow>()
+            .associate { it.id to it.displayName }
+        val trackCounts = supabase.from("playlist_tracks").select().decodeList<PlaylistMembershipRow>()
+            .groupingBy(PlaylistMembershipRow::playlistId)
+            .eachCount()
+        return playlists.map { playlist ->
+            PublicPlaylist(
+                id = playlist.id,
+                title = playlist.title,
+                description = playlist.description,
+                ownerName = ownerNames[playlist.ownerId].orEmpty(),
+                trackCount = trackCounts[playlist.id]?.toLong() ?: 0,
+            )
+        }.sortedWith(compareByDescending<PublicPlaylist> { it.trackCount }.thenBy(PublicPlaylist::title)).take(30)
+    }
+
     private suspend fun signedAvatarUrl(path: String?): String? = path?.let {
         runCatching {
             supabase.storage.from(AVATAR_BUCKET).createSignedUrl(
@@ -159,6 +179,9 @@ class SocialViewModel @Inject constructor(private val supabase: SupabaseClient) 
     @Serializable private data class PersonDto(val id: String, @SerialName("display_name") val displayName: String, @SerialName("avatar_path") val avatarPath: String? = null, @SerialName("is_following") val isFollowing: Boolean) { fun toPerson(avatarUrl: String?) = SocialPerson(id, displayName, avatarPath, avatarUrl, isFollowing) }
     @Serializable private data class ConnectionDto(val id: String, @SerialName("display_name") val displayName: String, @SerialName("avatar_path") val avatarPath: String? = null, @SerialName("is_following") val isFollowing: Boolean) { fun toPerson(avatarUrl: String?) = SocialPerson(id, displayName, avatarPath, avatarUrl, isFollowing) }
     @Serializable private data class PlaylistDto(val id: String, val title: String, val description: String? = null, @SerialName("owner_name") val ownerName: String, @SerialName("track_count") val trackCount: Long)
+    @Serializable private data class PublicPlaylistRow(val id: String, val title: String, val description: String? = null, @SerialName("owner_id") val ownerId: String)
+    @Serializable private data class ProfileNameRow(val id: String, @SerialName("display_name") val displayName: String)
+    @Serializable private data class PlaylistMembershipRow(@SerialName("playlist_id") val playlistId: String)
 
     private companion object {
         const val AVATAR_BUCKET = "avatars"

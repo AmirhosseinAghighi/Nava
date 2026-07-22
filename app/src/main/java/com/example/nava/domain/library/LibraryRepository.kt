@@ -25,13 +25,14 @@ data class PlaylistTrack(
 
 data class PlaylistDetails(val playlist: UserPlaylist, val tracks: List<PlaylistTrack>)
 data class LibrarySummary(val playlists: List<UserPlaylist> = emptyList(), val likedCount: Long = 0)
+data class PlaylistCoverUpload(val bytes: ByteArray, val extension: String)
 
 interface LibraryRepository {
     suspend fun load(): Result<LibrarySummary>
     suspend fun loadPlaylist(playlistId: String): Result<PlaylistDetails>
     suspend fun loadCatalog(): Result<List<PlaylistTrack>>
-    suspend fun createPlaylist(title: String, description: String?, isPublic: Boolean): Result<Unit>
-    suspend fun updatePlaylist(playlistId: String, title: String, description: String?, isPublic: Boolean): Result<Unit>
+    suspend fun createPlaylist(title: String, description: String?, isPublic: Boolean, cover: PlaylistCoverUpload?): Result<Unit>
+    suspend fun updatePlaylist(playlistId: String, title: String, description: String?, isPublic: Boolean, cover: PlaylistCoverUpload?): Result<Unit>
     suspend fun deletePlaylist(playlistId: String): Result<Unit>
     suspend fun addTrack(playlistId: String, trackId: String): Result<Unit>
     suspend fun removeTrack(playlistId: String, trackId: String): Result<Unit>

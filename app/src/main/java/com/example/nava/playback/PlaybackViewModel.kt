@@ -5,11 +5,13 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.Uri
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.nava.domain.catalog.HomeTrack
 import com.example.nava.data.downloads.OfflineDownloadRepository
+import com.example.nava.data.downloads.OfflineTrackEntity
 import java.io.File
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.jan.supabase.SupabaseClient
@@ -116,6 +118,19 @@ class PlaybackViewModel @Inject constructor(
         playTrack(track)
     }
 
+    fun playOffline(download: OfflineTrackEntity) = viewModelScope.launch {
+        rememberCurrentTrack()
+        val track = HomeTrack(
+            id = download.trackId,
+            title = download.title,
+            artistName = download.artistName,
+            coverImageUrl = download.coverImageUrl,
+            audioUrl = download.audioPath,
+            languageCode = "",
+        )
+        playTrack(track, download.audioPath)
+    }
+
     fun addToQueue(track: HomeTrack) {
         _userQueue.value = _userQueue.value + track
     }
@@ -136,13 +151,18 @@ class PlaybackViewModel @Inject constructor(
         }
     }
 
-    private suspend fun playTrack(track: HomeTrack): Boolean {
+    private suspend fun playTrack(track: HomeTrack, localAudioPath: String? = null): Boolean {
         runCatching {
-            offlineDownloads.find(track.id)
+            localAudioPath
+                ?.let(::File)
+                ?.takeIf(File::exists)
+                ?.let(Uri::fromFile)
+                ?.toString()
+                ?: offlineDownloads.find(track.id)
                 ?.audioPath
                 ?.let(::File)
                 ?.takeIf(File::exists)
-                ?.toURI()
+                ?.let(Uri::fromFile)
                 ?.toString()
                 ?: resolver.resolve(track.audioUrl)
         }

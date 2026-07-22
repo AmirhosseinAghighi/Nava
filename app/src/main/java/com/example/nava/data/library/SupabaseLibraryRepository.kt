@@ -4,13 +4,17 @@ import com.example.nava.data.catalog.toPublicCoverUrl
 import com.example.nava.domain.library.LibraryRepository
 import com.example.nava.domain.library.LibrarySummary
 import com.example.nava.domain.library.PlaylistDetails
+import com.example.nava.domain.library.PlaylistCoverUpload
 import com.example.nava.domain.library.PlaylistTrack
 import com.example.nava.domain.library.UserPlaylist
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.storage.storage
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
+import java.util.UUID
+import kotlin.time.Duration.Companion.minutes
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -54,9 +58,15 @@ import javax.inject.Singleton
         loadCatalogRows().map { it.toDomain() }
     }
 
-    override suspend fun createPlaylist(title: String, description: String?, isPublic: Boolean): Result<Unit> = runCatching {
+    override suspend fun createPlaylist(
+        title: String,
+        description: String?,
+        isPublic: Boolean,
+        cover: PlaylistCoverUpload?,
+    ): Result<Unit> = runCatching {
+        val coverPath = cover?.let { uploadPlaylistCover(UUID.randomUUID().toString(), it) }
         supabase.from("playlists").insert(
-            CreatePlaylistDto(requireUserId(), title.trim(), description.clean(), isPublic),
+            CreatePlaylistDto(requireUserId(), title.trim(), description.clean(), coverPath, isPublic),
         )
     }
 
@@ -65,9 +75,17 @@ import javax.inject.Singleton
         title: String,
         description: String?,
         isPublic: Boolean,
+        cover: PlaylistCoverUpload?,
     ): Result<Unit> = runCatching {
-        supabase.from("playlists").update(EditPlaylistDto(title.trim(), description.clean(), isPublic)) {
-            filter { eq("id", playlistId) }
+        val coverPath = cover?.let { uploadPlaylistCover(playlistId, it) }
+        if (coverPath == null) {
+            supabase.from("playlists").update(EditPlaylistDto(title.trim(), description.clean(), isPublic)) {
+                filter { eq("id", playlistId) }
+            }
+        } else {
+            supabase.from("playlists").update(EditPlaylistWithCoverDto(title.trim(), description.clean(), coverPath, isPublic)) {
+                filter { eq("id", playlistId) }
+            }
         }
     }
 
@@ -102,14 +120,28 @@ import javax.inject.Singleton
 
     private fun requireUserId(): String = supabase.auth.currentUserOrNull()?.id ?: error("Not signed in")
 
-    private fun PlaylistDto.toDomain(trackCount: Int, fallbackCover: String?) = UserPlaylist(
+    private suspend fun PlaylistDto.toDomain(trackCount: Int, fallbackCover: String?) = UserPlaylist(
         id = id,
         title = title,
         description = description,
-        coverImageUrl = (coverImageUrl ?: fallbackCover)?.toPublicCoverUrl(supabase),
+        coverImageUrl = resolvePlaylistCover(coverImageUrl ?: fallbackCover),
         isPublic = isPublic,
         trackCount = trackCount,
     )
+
+    private suspend fun uploadPlaylistCover(key: String, cover: PlaylistCoverUpload): String {
+        val userId = requireUserId()
+        val objectPath = "$userId/playlists/$key.${cover.extension}"
+        supabase.storage.from(PLAYLIST_COVERS_BUCKET).upload(objectPath, cover.bytes) { upsert = true }
+        return "storage://$PLAYLIST_COVERS_BUCKET/$objectPath"
+    }
+
+    private suspend fun resolvePlaylistCover(value: String?): String? = when {
+        value == null -> null
+        value.startsWith(PLAYLIST_COVERS_PREFIX) -> supabase.storage.from(PLAYLIST_COVERS_BUCKET)
+            .createSignedUrl(value.removePrefix(PLAYLIST_COVERS_PREFIX), COVER_URL_LIFETIME)
+        else -> value.toPublicCoverUrl(supabase)
+    }
 
     private fun TrackCardDto.toDomain() = PlaylistTrack(
         id = id,
@@ -152,12 +184,20 @@ import javax.inject.Singleton
     @SerialName("owner_id") val ownerId: String,
     val title: String,
     val description: String?,
+    @SerialName("cover_image_url") val coverImageUrl: String?,
     @SerialName("is_public") val isPublic: Boolean,
 )
 
 @Serializable private data class EditPlaylistDto(
     val title: String,
     val description: String?,
+    @SerialName("is_public") val isPublic: Boolean,
+)
+
+@Serializable private data class EditPlaylistWithCoverDto(
+    val title: String,
+    val description: String?,
+    @SerialName("cover_image_url") val coverImageUrl: String,
     @SerialName("is_public") val isPublic: Boolean,
 )
 
@@ -168,3 +208,7 @@ import javax.inject.Singleton
 )
 
 @Serializable private data class LikeDto(@SerialName("track_id") val trackId: String)
+
+private const val PLAYLIST_COVERS_BUCKET = "avatars"
+private const val PLAYLIST_COVERS_PREFIX = "storage://avatars/"
+private val COVER_URL_LIFETIME = 10.minutes

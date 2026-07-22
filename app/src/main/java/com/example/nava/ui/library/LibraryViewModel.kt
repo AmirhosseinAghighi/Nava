@@ -1,17 +1,23 @@
 package com.example.nava.ui.library
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.nava.domain.library.LibraryRepository
 import com.example.nava.domain.library.LibrarySummary
+import com.example.nava.domain.library.PlaylistCoverUpload
 import com.example.nava.domain.library.PlaylistDetails
 import com.example.nava.domain.library.PlaylistTrack
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 data class LibraryUiState(
@@ -25,7 +31,10 @@ data class LibraryUiState(
     val operationFailed: Boolean = false,
 )
 
-@HiltViewModel class LibraryViewModel @Inject constructor(private val repository: LibraryRepository) : ViewModel() {
+@HiltViewModel class LibraryViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val repository: LibraryRepository,
+) : ViewModel() {
     private val _state = MutableStateFlow(LibraryUiState())
     val state: StateFlow<LibraryUiState> = _state.asStateFlow()
 
@@ -58,13 +67,13 @@ data class LibraryUiState(
         )
     }
 
-    fun createPlaylist(title: String, description: String?, isPublic: Boolean) = mutate {
-        repository.createPlaylist(title, description, isPublic).getOrThrow()
+    fun createPlaylist(title: String, description: String?, isPublic: Boolean, coverUri: Uri?) = mutate {
+        repository.createPlaylist(title, description, isPublic, coverUri?.let { readCover(it) }).getOrThrow()
         refreshSummary()
     }
 
-    fun updatePlaylist(playlistId: String, title: String, description: String?, isPublic: Boolean) = mutate {
-        repository.updatePlaylist(playlistId, title, description, isPublic).getOrThrow()
+    fun updatePlaylist(playlistId: String, title: String, description: String?, isPublic: Boolean, coverUri: Uri?) = mutate {
+        repository.updatePlaylist(playlistId, title, description, isPublic, coverUri?.let { readCover(it) }).getOrThrow()
         refreshSummary()
         refreshSelected(playlistId)
     }
@@ -111,5 +120,21 @@ data class LibraryUiState(
         repository.loadPlaylist(playlistId).getOrThrow().let { details ->
             _state.update { it.copy(selectedPlaylist = details) }
         }
+    }
+
+    private suspend fun readCover(uri: Uri): PlaylistCoverUpload = withContext(Dispatchers.IO) {
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            ?: error("Unable to read playlist cover")
+        require(bytes.size <= MAX_PLAYLIST_COVER_BYTES) { "Playlist cover is too large" }
+        val extension = when (context.contentResolver.getType(uri)) {
+            "image/png" -> "png"
+            "image/webp" -> "webp"
+            else -> "jpg"
+        }
+        PlaylistCoverUpload(bytes, extension)
+    }
+
+    private companion object {
+        const val MAX_PLAYLIST_COVER_BYTES = 2 * 1024 * 1024
     }
 }
