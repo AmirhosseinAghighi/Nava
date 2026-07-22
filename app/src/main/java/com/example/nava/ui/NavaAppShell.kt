@@ -204,6 +204,7 @@ import com.example.nava.playback.PlaybackViewModel
 import com.example.nava.playback.RepeatMode
 import com.example.nava.ui.theme.NavaMotion
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.text.DecimalFormat
@@ -218,6 +219,8 @@ private val navigationItems = listOf(
     NavItem(R.string.playlists, Icons.Outlined.QueueMusic),
     NavItem(R.string.profile, Icons.Outlined.AccountCircle),
 )
+
+private const val SHARE_SUCCESS_VISIBLE_MS = 2_500L
 
 @Composable
 private fun NavaTopBarBrand() {
@@ -313,6 +316,51 @@ private fun TopBarProfileAvatar(
 }
 
 @Composable
+private fun NotificationBell(
+    unreadCount: Long,
+    onClick: () -> Unit,
+) {
+    val notificationDescription = if (unreadCount > 0) {
+        stringResource(R.string.unread_notifications, unreadCount)
+    } else {
+        stringResource(R.string.notification)
+    }
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .semantics { contentDescription = notificationDescription },
+    ) {
+        IconButton(onClick = onClick, modifier = Modifier.fillMaxSize()) {
+            Icon(Icons.Outlined.NotificationsNone, contentDescription = null)
+        }
+        if (unreadCount > 0) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .height(18.dp)
+                    .widthIn(min = 18.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.error,
+                contentColor = MaterialTheme.colorScheme.onError,
+                shadowElevation = 2.dp,
+            ) {
+                Box(
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = if (unreadCount > 99) "99+" else unreadCount.toString(),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun NavaAppShell(
     session: AuthSession,
@@ -322,10 +370,13 @@ fun NavaAppShell(
     var selectedIndex by rememberSaveable { mutableIntStateOf(0) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var socialOpen by rememberSaveable { mutableStateOf(false) }
+    var notificationsOpen by rememberSaveable { mutableStateOf(false) }
+    var notificationChatOpen by rememberSaveable { mutableStateOf(false) }
     var socialInitialSection by rememberSaveable { mutableStateOf(SocialSection.PEOPLE) }
     var playerExpanded by rememberSaveable { mutableStateOf(false) }
     var queueCandidate by remember { mutableStateOf<HomeTrack?>(null) }
     var shareCandidate by remember { mutableStateOf<HomeTrack?>(null) }
+    var shareSuccessRecipient by remember { mutableStateOf<String?>(null) }
     var addToPlaylistCandidate by remember { mutableStateOf<HomeTrack?>(null) }
     val playbackViewModel: PlaybackViewModel = hiltViewModel(key = "playback:${session.userId}")
     val downloadViewModel: DownloadViewModel = hiltViewModel(key = "downloads:${session.userId}")
@@ -348,12 +399,28 @@ fun NavaAppShell(
     val chatState by chatViewModel.state.collectAsState()
     val libraryState by libraryViewModel.state.collectAsState()
     val profileState by profileViewModel.state.collectAsState()
+    val unreadConversations = chatState.conversations.filter { it.unreadCount > 0 }
+    val unreadMessageCount = unreadConversations.sumOf(ChatConversation::unreadCount)
+    LaunchedEffect(shareSuccessRecipient) {
+        if (shareSuccessRecipient != null) {
+            delay(SHARE_SUCCESS_VISIBLE_MS)
+            shareSuccessRecipient = null
+        }
+    }
     BackHandler(enabled = settingsOpen) {
         settingsOpen = false
+    }
+    BackHandler(enabled = notificationsOpen && !notificationChatOpen) {
+        notificationsOpen = false
+    }
+    BackHandler(enabled = notificationChatOpen) {
+        chatViewModel.closeConversation()
+        notificationChatOpen = false
     }
     BackHandler(
         enabled = !settingsOpen &&
             !socialOpen &&
+            !notificationsOpen &&
             !playerExpanded &&
             queueCandidate == null &&
             shareCandidate == null &&
@@ -366,10 +433,16 @@ fun NavaAppShell(
         topBar = {
             TopAppBar(
                 navigationIcon = {
-                    if (settingsOpen || socialOpen) {
+                    if (settingsOpen || socialOpen || notificationsOpen) {
                         IconButton(onClick = {
-                            settingsOpen = false
-                            socialOpen = false
+                            if (notificationChatOpen) {
+                                chatViewModel.closeConversation()
+                                notificationChatOpen = false
+                            } else {
+                                settingsOpen = false
+                                socialOpen = false
+                                notificationsOpen = false
+                            }
                         }) {
                             Icon(Icons.Outlined.ArrowBack, contentDescription = stringResource(R.string.back))
                         }
@@ -379,14 +452,20 @@ fun NavaAppShell(
                     when {
                         settingsOpen -> Text(stringResource(R.string.settings), style = MaterialTheme.typography.titleLarge)
                         socialOpen -> Text(stringResource(R.string.discover_people), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        notificationsOpen -> Text(stringResource(R.string.notification), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         else -> NavaTopBarBrand()
                     }
                 },
                 actions = {
-                    if (!settingsOpen && !socialOpen) {
-                        IconButton(onClick = {}) {
-                            Icon(Icons.Outlined.NotificationsNone, contentDescription = stringResource(R.string.notification))
-                        }
+                    if (!settingsOpen && !socialOpen && !notificationsOpen) {
+                        NotificationBell(
+                            unreadCount = unreadMessageCount,
+                            onClick = {
+                                chatViewModel.refreshInbox()
+                                notificationsOpen = true
+                                notificationChatOpen = false
+                            },
+                        )
                         IconButton(onClick = { settingsOpen = true }) {
                             Icon(Icons.Outlined.Settings, contentDescription = stringResource(R.string.open_settings))
                         }
@@ -415,7 +494,13 @@ fun NavaAppShell(
                     navigationItems.forEachIndexed { index, item ->
                         NavigationBarItem(
                             selected = index == selectedIndex,
-                            onClick = { selectedIndex = index; settingsOpen = false; socialOpen = false },
+                            onClick = {
+                                selectedIndex = index
+                                settingsOpen = false
+                                socialOpen = false
+                                notificationsOpen = false
+                                notificationChatOpen = false
+                            },
                             icon = { Icon(item.icon, contentDescription = null) },
                             label = { Text(stringResource(item.title)) },
                         )
@@ -426,6 +511,24 @@ fun NavaAppShell(
     ) { padding ->
         when {
             settingsOpen -> SettingsShell(session, preferences, onEvent, Modifier.padding(padding))
+            notificationsOpen && notificationChatOpen -> ChatShell(
+                modifier = Modifier.padding(padding),
+                onBack = { notificationChatOpen = false },
+                onConversationBack = { notificationChatOpen = false },
+                viewModel = chatViewModel,
+                playbackViewModel = playbackViewModel,
+            )
+            notificationsOpen -> ChatNotificationsScreen(
+                modifier = Modifier.padding(padding),
+                conversations = unreadConversations,
+                loading = chatState.loading,
+                error = chatState.error,
+                onRetry = chatViewModel::refreshInbox,
+                onOpenConversation = { conversation ->
+                    chatViewModel.openConversation(conversation)
+                    notificationChatOpen = true
+                },
+            )
             socialOpen -> SocialShell(
                 modifier = Modifier.padding(padding),
                 onBack = { socialOpen = false },
@@ -671,7 +774,10 @@ fun NavaAppShell(
             sending = chatState.sending,
             onDismiss = { shareCandidate = null },
             onShare = { conversation ->
-                chatViewModel.shareTrack(conversation, track) { shareCandidate = null }
+                chatViewModel.shareTrack(conversation, track) {
+                    shareCandidate = null
+                    shareSuccessRecipient = conversation.peerName
+                }
             },
             onOpenPeople = {
                 shareCandidate = null
@@ -707,6 +813,56 @@ fun NavaAppShell(
                 }
             },
         )
+    }
+    AnimatedVisibility(
+        visible = shareSuccessRecipient != null,
+        enter = fadeIn(tween(NavaMotion.Fast)) + slideInVertically(tween(NavaMotion.Standard)) { -it },
+        exit = fadeOut(tween(NavaMotion.Fast)) + slideOutVertically(tween(NavaMotion.Standard)) { -it },
+    ) {
+        ShareSuccessPopup(recipientName = shareSuccessRecipient.orEmpty())
+    }
+}
+
+@Composable
+private fun ShareSuccessPopup(recipientName: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .padding(horizontal = NavaSpacing.Lg)
+            .padding(top = 72.dp),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Surface(
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            shadowElevation = NavaSpacing.Md,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = NavaSpacing.Lg, vertical = NavaSpacing.Md),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+            ) {
+                Surface(
+                    modifier = Modifier.size(28.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Check,
+                        contentDescription = null,
+                        modifier = Modifier.padding(5.dp),
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.track_shared_success, recipientName),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
     }
 }
 
@@ -2768,6 +2924,7 @@ private fun SearchMessage(
     title: String,
     body: String,
     action: (@Composable () -> Unit)? = null,
+    icon: ImageVector = Icons.Outlined.ManageSearch,
 ) {
     Column(
         modifier = Modifier.fillMaxSize().padding(NavaSpacing.Xl),
@@ -2781,7 +2938,7 @@ private fun SearchMessage(
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
-                    imageVector = Icons.Outlined.ManageSearch,
+                    imageVector = icon,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.size(NavaDimensions.SearchEmptyGlyphSize),
@@ -3774,6 +3931,133 @@ private fun PersonalProfileStat(
         ) {
             Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(stringResource(label), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun ChatNotificationsScreen(
+    modifier: Modifier,
+    conversations: List<ChatConversation>,
+    loading: Boolean,
+    error: Boolean,
+    onRetry: () -> Unit,
+    onOpenConversation: (ChatConversation) -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = NavaSpacing.Lg),
+        verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
+            Text(
+                text = stringResource(R.string.unread_messages),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = stringResource(R.string.unread_messages_subtitle),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        when {
+            loading && conversations.isEmpty() -> Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator()
+            }
+            error && conversations.isEmpty() -> SearchMessage(
+                title = stringResource(R.string.notifications_load_error),
+                body = stringResource(R.string.social_error_hint),
+                action = {
+                    Button(onClick = onRetry) {
+                        Text(stringResource(R.string.retry))
+                    }
+                },
+            )
+            conversations.isEmpty() -> SearchMessage(
+                title = stringResource(R.string.no_unread_messages),
+                body = stringResource(R.string.no_unread_messages_hint),
+                icon = Icons.Outlined.NotificationsNone,
+            )
+            else -> LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = NavaSpacing.Lg),
+            ) {
+                items(conversations, key = ChatConversation::id) { conversation ->
+                    Card(
+                        onClick = { onOpenConversation(conversation) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.large,
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        ),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(NavaSpacing.Md),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+                        ) {
+                            Surface(
+                                modifier = Modifier.size(48.dp),
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = conversation.peerName.firstOrNull()?.uppercase() ?: "?",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                            }
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                Text(
+                                    text = conversation.peerName,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = conversation.lastMessage ?: stringResource(R.string.shared_music),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError,
+                            ) {
+                                Text(
+                                    text = if (conversation.unreadCount > 99) "99+" else conversation.unreadCount.toString(),
+                                    modifier = Modifier.padding(horizontal = NavaSpacing.Sm, vertical = NavaSpacing.Xs),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.Outlined.ChevronRight,
+                                contentDescription = stringResource(R.string.open_chat),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }

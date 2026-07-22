@@ -60,6 +60,7 @@ import java.time.format.FormatStyle
 fun ChatShell(
     modifier: Modifier,
     onBack: () -> Unit,
+    onConversationBack: (() -> Unit)? = null,
     viewModel: ChatViewModel = hiltViewModel(),
     playbackViewModel: PlaybackViewModel = hiltViewModel(),
 ) {
@@ -67,7 +68,14 @@ fun ChatShell(
     val nowPlaying by playbackViewModel.nowPlaying.collectAsState()
     Column(modifier = modifier.fillMaxSize().padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            IconButton(onClick = { if (state.activeConversation == null) onBack() else viewModel.closeConversation() }) {
+            IconButton(onClick = {
+                if (state.activeConversation == null) {
+                    onBack()
+                } else {
+                    viewModel.closeConversation()
+                    onConversationBack?.invoke()
+                }
+            }) {
                 Icon(Icons.Outlined.ArrowBack, contentDescription = stringResource(R.string.back))
             }
             Text(

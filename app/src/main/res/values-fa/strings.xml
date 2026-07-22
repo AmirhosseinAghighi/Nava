@@ -135,6 +135,12 @@
     <string name="navigation">ناوبری اصلی</string>
     <string name="top_bar_brand">نوا</string>
     <string name="notification">اعلان‌ها</string>
+    <string name="unread_notifications">اعلان‌ها، %1$d پیام خوانده‌نشده</string>
+    <string name="unread_messages">پیام‌های خوانده‌نشده</string>
+    <string name="unread_messages_subtitle">پیام‌هایی که هنوز باز نکرده‌اید اینجا نمایش داده می‌شوند.</string>
+    <string name="no_unread_messages">همه پیام‌ها را خوانده‌اید</string>
+    <string name="no_unread_messages_hint">پیام‌های جدید گفتگو اینجا نمایش داده می‌شوند.</string>
+    <string name="notifications_load_error">اعلان‌ها بارگیری نشدند</string>
     <string name="pause_playback">توقف پخش</string>
     <string name="resume_playback">ادامه پخش</string>
     <string name="previous_track">آهنگ قبلی</string>
@@ -201,6 +207,7 @@
     <string name="share_no_conversations">ابتدا یک گفت‌وگو بسازید؛ سپس می‌توانید موسیقی را مستقیماً برای آن شنونده بفرستید.</string>
     <string name="tap_to_share">برای ارسال این آهنگ بزنید</string>
     <string name="share_with">اشتراک‌گذاری با %1$s</string>
+    <string name="track_shared_success">موزیک برای %1$s فرستاده شد</string>
     <string name="shared_music">موسیقی اشتراک‌گذاری‌شده</string>
     <string name="play_shared_track">پخش آهنگ اشتراک‌گذاری‌شده</string>
     <string name="message_sent">ارسال شد</string>

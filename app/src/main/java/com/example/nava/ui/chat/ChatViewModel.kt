@@ -78,6 +78,10 @@ class ChatViewModel @Inject constructor(
 ) : ViewModel() {
     private val _state = MutableStateFlow(ChatUiState())
     val state = _state.asStateFlow()
+    private var inboxChannel: RealtimeChannel? = null
+    private var inboxRealtimeJob: Job? = null
+    private var inboxSyncJob: Job? = null
+    private var inboxRefreshJob: Job? = null
     private var activeChannel: RealtimeChannel? = null
     private var liveMessagesJob: Job? = null
     private var messageBroadcastJob: Job? = null
@@ -89,18 +93,27 @@ class ChatViewModel @Inject constructor(
     private val messageLoadMutex = Mutex()
     private val sharedTracks = mutableMapOf<String, HomeTrack>()
 
-    init { refreshInbox() }
+    init {
+        refreshInbox()
+        startInboxUpdates()
+    }
 
-    fun refreshInbox() = viewModelScope.launch {
-        _state.value = _state.value.copy(loading = _state.value.activeConversation == null, error = false)
-        runCatching {
-            supabase.postgrest.rpc("list_conversations", buildJsonObject { put("p_limit", 30) })
-                .decodeList<ConversationDto>()
-                .map { it.toConversation() }
-        }.onSuccess { conversations ->
-            _state.value = _state.value.copy(conversations = conversations, loading = false)
-        }.onFailure {
-            _state.value = _state.value.copy(loading = false, error = true)
+    fun refreshInbox() {
+        inboxRefreshJob?.cancel()
+        inboxRefreshJob = viewModelScope.launch {
+            _state.value = _state.value.copy(
+                loading = _state.value.activeConversation == null && _state.value.conversations.isEmpty(),
+                error = false,
+            )
+            runCatching {
+                supabase.postgrest.rpc("list_conversations", buildJsonObject { put("p_limit", 30) })
+                    .decodeList<ConversationDto>()
+                    .map { it.toConversation() }
+            }.onSuccess { conversations ->
+                _state.value = _state.value.copy(conversations = conversations, loading = false)
+            }.onFailure {
+                _state.value = _state.value.copy(loading = false, error = true)
+            }
         }
     }
 
@@ -275,7 +288,7 @@ class ChatViewModel @Inject constructor(
             supabase.postgrest.rpc("mark_conversation_delivered", buildJsonObject { put("p_conversation_id", conversationId) })
             supabase.postgrest.rpc("mark_conversation_read", buildJsonObject { put("p_conversation_id", conversationId) })
             activeChannel?.broadcast(RECEIPT_EVENT, ReceiptEvent(supabase.auth.currentUserOrNull()?.id.orEmpty()))
-        }
+        }.onSuccess { refreshInbox() }
     }
 
     private fun failLoading() { _state.value = _state.value.copy(loading = false, error = true) }
@@ -334,6 +347,26 @@ class ChatViewModel @Inject constructor(
         markRead(conversation.id)
     }
 
+    private fun startInboxUpdates() = viewModelScope.launch {
+        val currentUser = supabase.auth.currentUserOrNull() ?: return@launch
+        runCatching {
+            val channel = supabase.channel("conversation-inbox:${currentUser.id}")
+            inboxChannel = channel
+            inboxRealtimeJob = viewModelScope.launch {
+                channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") {
+                    table = "conversation_messages"
+                }.collect { refreshInbox() }
+            }
+            channel.subscribe(blockUntilSubscribed = true)
+        }
+        inboxSyncJob = viewModelScope.launch {
+            while (isActive) {
+                delay(INBOX_SYNC_FALLBACK_MS)
+                refreshInbox()
+            }
+        }
+    }
+
     private fun updateTyping(isTyping: Boolean) = viewModelScope.launch {
         _state.value.activeConversation ?: return@launch
         val user = supabase.auth.currentUserOrNull() ?: return@launch
@@ -361,6 +394,10 @@ class ChatViewModel @Inject constructor(
     }
 
     override fun onCleared() {
+        inboxRealtimeJob?.cancel()
+        inboxSyncJob?.cancel()
+        inboxRefreshJob?.cancel()
+        inboxChannel?.let { channel -> viewModelScope.launch { supabase.realtime.removeChannel(channel) } }
         viewModelScope.launch { stopRealtime() }
         super.onCleared()
     }
@@ -488,6 +525,7 @@ class ChatViewModel @Inject constructor(
         const val TYPING_IDLE_MS = 1_200L
         const val REMOTE_TYPING_TIMEOUT_MS = 4_000L
         const val MESSAGE_SYNC_FALLBACK_MS = 2_000L
+        const val INBOX_SYNC_FALLBACK_MS = 5_000L
         const val RECEIPT_EVENT = "message-receipt"
         const val MESSAGE_EVENT = "message-changed"
         const val TYPING_EVENT = "typing-changed"

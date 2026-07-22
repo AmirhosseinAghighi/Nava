@@ -135,6 +135,12 @@
     <string name="navigation">Main navigation</string>
     <string name="top_bar_brand">Nava</string>
     <string name="notification">Notifications</string>
+    <string name="unread_notifications">Notifications, %1$d unread messages</string>
+    <string name="unread_messages">Unread messages</string>
+    <string name="unread_messages_subtitle">Messages you have not opened yet appear here.</string>
+    <string name="no_unread_messages">You’re all caught up</string>
+    <string name="no_unread_messages_hint">New chat messages will appear here.</string>
+    <string name="notifications_load_error">Notifications could not be loaded</string>
     <string name="pause_playback">Pause playback</string>
     <string name="resume_playback">Resume playback</string>
     <string name="previous_track">Previous track</string>
@@ -201,6 +207,7 @@
     <string name="share_no_conversations">Start a conversation first, then you can share music directly with that listener.</string>
     <string name="tap_to_share">Tap to send this track</string>
     <string name="share_with">Share with %1$s</string>
+    <string name="track_shared_success">Track sent to %1$s</string>
     <string name="shared_music">Shared music</string>
     <string name="play_shared_track">Play shared track</string>
     <string name="message_sent">Sent</string>
