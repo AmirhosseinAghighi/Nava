@@ -45,6 +45,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Chat
@@ -249,36 +250,63 @@ private fun TopBarProfileAvatar(
     onClick: () -> Unit,
 ) {
     val avatarModel = state.pendingAvatarUri ?: state.avatarUrl
-    Surface(
-        onClick = onClick,
+    Box(
         modifier = Modifier
             .padding(start = NavaSpacing.Sm)
-            .size(44.dp)
-            .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape),
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        shadowElevation = NavaSpacing.Xs,
+            .size(48.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Box(
-            modifier = Modifier.fillMaxSize().padding(2.dp),
-            contentAlignment = Alignment.Center,
+        Surface(
+            onClick = onClick,
+            modifier = Modifier
+                .size(44.dp)
+                .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            shadowElevation = NavaSpacing.Xs,
         ) {
-            when {
-                avatarModel != null -> UserAvatar(
-                    model = avatarModel,
-                    contentDescription = stringResource(R.string.profile),
-                    modifier = Modifier.fillMaxSize(),
-                )
-                state.isLoading -> CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp,
-                )
-                else -> Icon(
-                    Icons.Outlined.AccountCircle,
-                    contentDescription = stringResource(R.string.profile),
-                    modifier = Modifier.fillMaxSize(),
-                )
+            Box(
+                modifier = Modifier.fillMaxSize().padding(2.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                when {
+                    avatarModel != null -> UserAvatar(
+                        model = avatarModel,
+                        contentDescription = stringResource(R.string.profile),
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    state.isLoading -> CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    else -> Icon(
+                        Icons.Outlined.AccountCircle,
+                        contentDescription = stringResource(R.string.profile),
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
+        }
+
+        if (state.isPremium) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(18.dp)
+                    .border(1.5.dp, MaterialTheme.colorScheme.surface, CircleShape),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shadowElevation = 2.dp,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Filled.Star,
+                        contentDescription = stringResource(R.string.premium_member),
+                        modifier = Modifier.size(11.dp),
+                    )
+                }
             }
         }
     }
