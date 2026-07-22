@@ -2,6 +2,7 @@ package com.example.nava.ui
 
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,6 +22,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -41,34 +44,54 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Chat
+import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.DownloadDone
+import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Clear
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.FormatSize
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.ManageSearch
+import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.QueueMusic
+import androidx.compose.material.icons.outlined.Repeat
+import androidx.compose.material.icons.outlined.RepeatOne
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.PlaylistAdd
+import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.SkipNext
 import androidx.compose.material.icons.outlined.SkipPrevious
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Timer
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -78,9 +101,11 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.SwipeToDismissBox
@@ -119,6 +144,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.semantics.Role
@@ -143,21 +169,30 @@ import com.example.nava.ui.theme.NavaBlack
 import com.example.nava.ui.theme.NavaSpacing
 import com.example.nava.ui.theme.NavaWhite
 import com.example.nava.ui.home.HomeUiState
+import com.example.nava.ui.home.HomeQuickViewModel
 import com.example.nava.ui.home.HomeViewModel
 import com.example.nava.ui.search.SearchViewModel
 import com.example.nava.ui.library.LibraryUiState
 import com.example.nava.ui.library.LibraryViewModel
 import com.example.nava.ui.library.LikesViewModel
+import com.example.nava.domain.library.PlaylistTrack
+import com.example.nava.domain.library.UserPlaylist
 import com.example.nava.ui.downloads.DownloadViewModel
+import com.example.nava.ui.downloads.DownloadUiError
 import com.example.nava.ui.downloads.DownloadsUiState
+import com.example.nava.data.downloads.OfflineTrackEntity
 import com.example.nava.ui.profile.ProfileViewModel
 import com.example.nava.ui.social.SocialViewModel
+import com.example.nava.ui.social.PublicPlaylist
+import com.example.nava.ui.social.SocialProfileDetails
 import com.example.nava.ui.social.SocialPerson
 import com.example.nava.ui.social.SocialSection
 import com.example.nava.ui.chat.ChatShell
+import com.example.nava.ui.chat.ChatConversation
 import com.example.nava.ui.chat.ChatViewModel
 import com.example.nava.playback.NowPlaying
 import com.example.nava.playback.PlaybackViewModel
+import com.example.nava.playback.RepeatMode
 import com.example.nava.ui.theme.NavaMotion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
@@ -210,31 +245,68 @@ fun NavaAppShell(
     var selectedIndex by rememberSaveable { mutableIntStateOf(0) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var socialOpen by rememberSaveable { mutableStateOf(false) }
+    var socialInitialSection by rememberSaveable { mutableStateOf(SocialSection.PEOPLE) }
     var playerExpanded by rememberSaveable { mutableStateOf(false) }
     var queueCandidate by remember { mutableStateOf<HomeTrack?>(null) }
-    val playbackViewModel: PlaybackViewModel = hiltViewModel()
-    val downloadViewModel: DownloadViewModel = hiltViewModel()
-    val likesViewModel: LikesViewModel = hiltViewModel()
+    var shareCandidate by remember { mutableStateOf<HomeTrack?>(null) }
+    val playbackViewModel: PlaybackViewModel = hiltViewModel(key = "playback:${session.userId}")
+    val downloadViewModel: DownloadViewModel = hiltViewModel(key = "downloads:${session.userId}")
+    val likesViewModel: LikesViewModel = hiltViewModel(key = "likes:${session.userId}")
+    val chatViewModel: ChatViewModel = hiltViewModel(key = "chat:${session.userId}")
+    val profileViewModel: ProfileViewModel = hiltViewModel(key = "profile:${session.userId}")
+    val socialViewModel: SocialViewModel = hiltViewModel(key = "social:${session.userId}")
     val nowPlaying by playbackViewModel.nowPlaying.collectAsState()
     val playbackSpeed by playbackViewModel.playbackSpeed.collectAsState()
     val sleepTimerMinutes by playbackViewModel.sleepTimerMinutes.collectAsState()
+    val shuffleEnabled by playbackViewModel.shuffleEnabled.collectAsState()
+    val repeatMode by playbackViewModel.repeatMode.collectAsState()
     val fftBands by playbackViewModel.fftBands.collectAsState()
     val playbackError by playbackViewModel.playbackError.collectAsState()
     val downloadState by downloadViewModel.state.collectAsState()
     val downloadError by downloadViewModel.downloadError.collectAsState()
+    val likesState by likesViewModel.state.collectAsState()
+    val chatState by chatViewModel.state.collectAsState()
+    BackHandler(enabled = settingsOpen) {
+        settingsOpen = false
+    }
+    BackHandler(
+        enabled = !settingsOpen &&
+            !socialOpen &&
+            !playerExpanded &&
+            queueCandidate == null &&
+            shareCandidate == null &&
+            selectedIndex != 0,
+    ) {
+        selectedIndex = 0
+    }
     Scaffold(
         topBar = {
             TopAppBar(
+                navigationIcon = {
+                    if (settingsOpen || socialOpen) {
+                        IconButton(onClick = {
+                            settingsOpen = false
+                            socialOpen = false
+                        }) {
+                            Icon(Icons.Outlined.ArrowBack, contentDescription = stringResource(R.string.back))
+                        }
+                    }
+                },
                 title = {
-                    if (settingsOpen) Text(stringResource(R.string.settings), style = MaterialTheme.typography.titleLarge)
-                    else NavaTopBarBrand()
+                    when {
+                        settingsOpen -> Text(stringResource(R.string.settings), style = MaterialTheme.typography.titleLarge)
+                        socialOpen -> Text(stringResource(R.string.discover_people), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        else -> NavaTopBarBrand()
+                    }
                 },
                 actions = {
-                    IconButton(onClick = {}) {
-                        Icon(Icons.Outlined.NotificationsNone, contentDescription = stringResource(R.string.notification))
-                    }
-                    IconButton(onClick = { settingsOpen = !settingsOpen }) {
-                        Icon(Icons.Outlined.Settings, contentDescription = stringResource(R.string.open_settings))
+                    if (!settingsOpen && !socialOpen) {
+                        IconButton(onClick = {}) {
+                            Icon(Icons.Outlined.NotificationsNone, contentDescription = stringResource(R.string.notification))
+                        }
+                        IconButton(onClick = { settingsOpen = true }) {
+                            Icon(Icons.Outlined.Settings, contentDescription = stringResource(R.string.open_settings))
+                        }
                     }
                 },
             )
@@ -262,12 +334,30 @@ fun NavaAppShell(
         },
     ) { padding ->
         when {
-            settingsOpen -> SettingsShell(preferences, onEvent, Modifier.padding(padding))
-            socialOpen -> SocialShell(Modifier.padding(padding))
+            settingsOpen -> SettingsShell(session, preferences, onEvent, Modifier.padding(padding))
+            socialOpen -> SocialShell(
+                modifier = Modifier.padding(padding),
+                onBack = { socialOpen = false },
+                initialSection = socialInitialSection,
+                viewModel = socialViewModel,
+                chatViewModel = chatViewModel,
+                playbackViewModel = playbackViewModel,
+            )
             selectedIndex == 0 -> HomeShell(
                 modifier = Modifier.padding(padding),
-                onPlay = playbackViewModel::play,
+                likedTracks = likesState.songs,
+                currentTrackId = nowPlaying?.track?.id,
+                onPlay = { track ->
+                    if (nowPlaying?.track?.id != track.id) playbackViewModel.play(track)
+                    playerExpanded = true
+                },
                 onQueue = { queueCandidate = it },
+                onTrackOptions = { queueCandidate = it },
+                onOpenMyPlaylists = { selectedIndex = 3 },
+                onOpenTopPlaylists = {
+                    socialInitialSection = SocialSection.PLAYLISTS
+                    socialOpen = true
+                },
                 onShuffleSource = playbackViewModel::setShuffleSource,
             )
             selectedIndex == 1 -> SearchShell(
@@ -279,9 +369,35 @@ fun NavaAppShell(
                 },
                 onTrackOptions = { queueCandidate = it },
             )
-            selectedIndex == 2 -> DownloadsShell(Modifier.padding(padding), downloadState, downloadViewModel)
-            selectedIndex == 3 -> LibraryShell(modifier = Modifier.padding(padding), likesViewModel = likesViewModel)
-            selectedIndex == 4 -> ProfileShell(session, Modifier.padding(padding), onDiscoverPeople = { socialOpen = true })
+            selectedIndex == 2 -> DownloadsShell(
+                modifier = Modifier.padding(padding),
+                state = downloadState,
+                currentTrackId = nowPlaying?.track?.id,
+                viewModel = downloadViewModel,
+                onPlay = { download ->
+                    playbackViewModel.playOffline(download)
+                    playerExpanded = true
+                },
+            )
+            selectedIndex == 3 -> LibraryShell(
+                modifier = Modifier.padding(padding),
+                likesViewModel = likesViewModel,
+                currentTrackId = nowPlaying?.track?.id,
+                onTrackClick = { track ->
+                    if (nowPlaying?.track?.id != track.id) playbackViewModel.play(track)
+                    playerExpanded = true
+                },
+                onTrackOptions = { queueCandidate = it },
+            )
+            selectedIndex == 4 -> ProfileShell(
+                session = session,
+                modifier = Modifier.padding(padding),
+                onOpenSocial = { section ->
+                    socialInitialSection = section
+                    socialOpen = true
+                },
+                viewModel = profileViewModel,
+            )
             else -> PlaceholderShell(navigationItems[selectedIndex].title, Modifier.padding(padding))
         }
     }
@@ -295,12 +411,22 @@ fun NavaAppShell(
                 nowPlaying = now,
                 playbackSpeed = playbackSpeed,
                 sleepTimerMinutes = sleepTimerMinutes,
+                shuffleEnabled = shuffleEnabled,
+                repeatMode = repeatMode,
+                isLiked = now.track.id in likesState.likedIds,
+                isDownloaded = now.track.id in downloadState.downloadedTrackIds,
+                isDownloading = now.track.id in downloadState.downloadingTrackIds,
                 fftBands = fftBands,
                 onDismiss = { playerExpanded = false },
                 onToggle = { if (now.playing) playbackViewModel.pause() else playbackViewModel.resume() },
                 onSeek = playbackViewModel::seekTo,
                 onCycleSpeed = playbackViewModel::cycleSpeed,
                 onCycleSleepTimer = playbackViewModel::cycleSleepTimer,
+                onToggleShuffle = playbackViewModel::toggleShuffle,
+                onCycleRepeat = playbackViewModel::cycleRepeatMode,
+                onToggleLike = { likesViewModel.toggle(now.track) },
+                onDownload = { downloadViewModel.request(now.track) },
+                onShare = { shareCandidate = now.track },
                 onPrevious = playbackViewModel::skipToPrevious,
                 onNext = playbackViewModel::skipToNext,
             )
@@ -320,8 +446,7 @@ fun NavaAppShell(
     queueCandidate?.let { track ->
         val isDownloaded = track.id in downloadState.downloadedTrackIds
         val isDownloading = track.id in downloadState.downloadingTrackIds
-        val likes by likesViewModel.state.collectAsState()
-        val isLiked = track.id in likes.likedIds
+        val isLiked = track.id in likesState.likedIds
         ModalBottomSheet(
             onDismissRequest = { queueCandidate = null },
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -407,17 +532,59 @@ fun NavaAppShell(
                         queueCandidate = null
                     },
                 )
+                SongActionRow(
+                    icon = Icons.Outlined.Share,
+                    label = stringResource(R.string.share_track),
+                    onClick = {
+                        shareCandidate = track
+                        queueCandidate = null
+                    },
+                )
                 Spacer(Modifier.height(NavaSpacing.Lg))
             }
         }
     }
+    shareCandidate?.let { track ->
+        TrackShareSheet(
+            track = track,
+            conversations = chatState.conversations,
+            loading = chatState.loading,
+            sending = chatState.sending,
+            onDismiss = { shareCandidate = null },
+            onShare = { conversation ->
+                chatViewModel.shareTrack(conversation, track) { shareCandidate = null }
+            },
+            onOpenPeople = {
+                shareCandidate = null
+                playerExpanded = false
+                socialInitialSection = SocialSection.PEOPLE
+                socialOpen = true
+            },
+        )
+    }
     downloadError?.let { error ->
         AlertDialog(
             onDismissRequest = downloadViewModel::dismissDownloadError,
-            text = { Text(error) },
+            title = {
+                Text(
+                    text = stringResource(
+                        if (error == DownloadUiError.PremiumRequired) R.string.premium_required_title
+                        else R.string.download_unavailable_title,
+                    ),
+                    fontWeight = FontWeight.Bold,
+                )
+            },
+            text = {
+                Text(
+                    stringResource(
+                        if (error == DownloadUiError.PremiumRequired) R.string.premium_download_required
+                        else R.string.download_unavailable,
+                    ),
+                )
+            },
             confirmButton = {
                 Button(onClick = downloadViewModel::dismissDownloadError) {
-                    Text(stringResource(R.string.close))
+                    Text(stringResource(R.string.got_it))
                 }
             },
         )
@@ -460,6 +627,103 @@ private fun SongActionRow(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun TrackShareSheet(
+    track: HomeTrack,
+    conversations: List<ChatConversation>,
+    loading: Boolean,
+    sending: Boolean,
+    onDismiss: () -> Unit,
+    onShare: (ChatConversation) -> Unit,
+    onOpenPeople: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = NavaSpacing.Lg, vertical = NavaSpacing.Sm),
+            verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            Text(stringResource(R.string.share_track), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.shapes.large)
+                    .padding(NavaSpacing.Md),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+            ) {
+                AsyncImage(
+                    model = track.coverImageUrl,
+                    contentDescription = stringResource(R.string.track_artwork, track.title),
+                    contentScale = ContentScale.Crop,
+                    error = painterResource(R.drawable.ic_launcher_foreground),
+                    modifier = Modifier.size(NavaDimensions.SearchActionArtworkSize).clip(MaterialTheme.shapes.medium),
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(track.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text(track.artistName, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                }
+            }
+            Text(stringResource(R.string.choose_share_recipient), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            when {
+                loading -> Box(Modifier.fillMaxWidth().padding(NavaSpacing.Xl), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+                conversations.isEmpty() -> {
+                    Text(stringResource(R.string.share_no_conversations), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                else -> LazyColumn(
+                    modifier = Modifier.fillMaxWidth().height(NavaDimensions.ShareRecipientListHeight),
+                    verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+                ) {
+                    items(conversations, key = ChatConversation::id) { conversation ->
+                        Surface(
+                            onClick = { onShare(conversation) },
+                            enabled = !sending,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.large,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Md),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+                            ) {
+                                Surface(
+                                    modifier = Modifier.size(NavaDimensions.PlayerModeControlSize),
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(conversation.peerName.take(1).uppercase(), fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(conversation.peerName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    Text(stringResource(R.string.tap_to_share), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Icon(Icons.Outlined.Share, contentDescription = stringResource(R.string.share_with, conversation.peerName))
+                            }
+                        }
+                    }
+                }
+            }
+            FilledTonalButton(onClick = onOpenPeople, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Outlined.Groups, contentDescription = null)
+                Spacer(Modifier.size(NavaSpacing.Sm))
+                Text(stringResource(R.string.discover_people))
+            }
+            Spacer(Modifier.height(NavaSpacing.Sm))
         }
     }
 }
@@ -521,12 +785,22 @@ private fun FullPlayer(
     nowPlaying: NowPlaying,
     playbackSpeed: Float,
     sleepTimerMinutes: Long?,
+    shuffleEnabled: Boolean,
+    repeatMode: RepeatMode,
+    isLiked: Boolean,
+    isDownloaded: Boolean,
+    isDownloading: Boolean,
     fftBands: FloatArray,
     onDismiss: () -> Unit,
     onToggle: () -> Unit,
     onSeek: (Long) -> Unit,
     onCycleSpeed: () -> Unit,
     onCycleSleepTimer: () -> Unit,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeat: () -> Unit,
+    onToggleLike: () -> Unit,
+    onDownload: () -> Unit,
+    onShare: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
 ) {
@@ -564,7 +838,7 @@ private fun FullPlayer(
                     .navigationBarsPadding()
                     .padding(horizontal = NavaSpacing.Xl),
             ) {
-                PlayerHeader(onDismiss)
+                PlayerHeader(onDismiss = onDismiss, onShare = onShare)
                 Column(
                     modifier = Modifier
                         .weight(1f)
@@ -666,10 +940,40 @@ private fun FullPlayer(
                     }
                     PlayerTransportControls(
                         playing = nowPlaying.playing,
+                        shuffleEnabled = shuffleEnabled,
+                        repeatMode = repeatMode,
+                        onToggleShuffle = onToggleShuffle,
+                        onCycleRepeat = onCycleRepeat,
                         onPrevious = onPrevious,
                         onToggle = onToggle,
                         onNext = onNext,
                     )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+                    ) {
+                        PlayerUtilityButton(
+                            icon = if (isLiked) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
+                            label = stringResource(if (isLiked) R.string.liked else R.string.like_song),
+                            onClick = onToggleLike,
+                            selected = isLiked,
+                            modifier = Modifier.weight(1f),
+                        )
+                        PlayerUtilityButton(
+                            icon = if (isDownloaded) Icons.Outlined.DownloadDone else Icons.Outlined.Download,
+                            label = stringResource(
+                                when {
+                                    isDownloaded -> R.string.downloaded
+                                    isDownloading -> R.string.downloading
+                                    else -> R.string.download
+                                },
+                            ),
+                            onClick = onDownload,
+                            selected = isDownloaded,
+                            enabled = !isDownloaded && !isDownloading,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
@@ -695,7 +999,7 @@ private fun FullPlayer(
 }
 
 @Composable
-private fun PlayerHeader(onDismiss: () -> Unit) {
+private fun PlayerHeader(onDismiss: () -> Unit, onShare: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().height(NavaDimensions.PlayerSecondaryControlSize),
         verticalAlignment = Alignment.CenterVertically,
@@ -714,13 +1018,23 @@ private fun PlayerHeader(onDismiss: () -> Unit) {
             color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.size(NavaDimensions.PlayerSecondaryControlSize))
+        IconButton(onClick = onShare, modifier = Modifier.size(NavaDimensions.PlayerSecondaryControlSize)) {
+            Icon(
+                Icons.Outlined.Share,
+                contentDescription = stringResource(R.string.share_track),
+                modifier = Modifier.size(NavaSpacing.Xl),
+            )
+        }
     }
 }
 
 @Composable
 private fun PlayerTransportControls(
     playing: Boolean,
+    shuffleEnabled: Boolean,
+    repeatMode: RepeatMode,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeat: () -> Unit,
     onPrevious: () -> Unit,
     onToggle: () -> Unit,
     onNext: () -> Unit,
@@ -730,6 +1044,12 @@ private fun PlayerTransportControls(
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        PlayerModeButton(
+            icon = Icons.Outlined.Shuffle,
+            contentDescription = if (shuffleEnabled) R.string.shuffle_enabled else R.string.shuffle,
+            selected = shuffleEnabled,
+            onClick = onToggleShuffle,
+        )
         PlayerControlButton(Icons.Outlined.SkipPrevious, R.string.previous_track, onPrevious)
         PlayerControlButton(
             icon = if (playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
@@ -738,6 +1058,40 @@ private fun PlayerTransportControls(
             primary = true,
         )
         PlayerControlButton(Icons.Outlined.SkipNext, R.string.next_track, onNext)
+        PlayerModeButton(
+            icon = if (repeatMode == RepeatMode.One) Icons.Outlined.RepeatOne else Icons.Outlined.Repeat,
+            contentDescription = when (repeatMode) {
+                RepeatMode.Off -> R.string.repeat_off
+                RepeatMode.All -> R.string.repeat_all
+                RepeatMode.One -> R.string.repeat_one
+            },
+            selected = repeatMode != RepeatMode.Off,
+            onClick = onCycleRepeat,
+        )
+    }
+}
+
+@Composable
+private fun PlayerModeButton(
+    icon: ImageVector,
+    @StringRes contentDescription: Int,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.size(NavaDimensions.PlayerModeControlSize),
+        shape = CircleShape,
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+        contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                icon,
+                contentDescription = stringResource(contentDescription),
+                modifier = Modifier.size(NavaSpacing.Xl),
+            )
+        }
     }
 }
 
@@ -771,13 +1125,16 @@ private fun PlayerUtilityButton(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    enabled: Boolean = true,
 ) {
     Surface(
         onClick = onClick,
+        enabled = enabled,
         modifier = modifier.height(NavaDimensions.PlayerUtilityControlHeight),
         shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurface,
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
     ) {
         Row(
             modifier = Modifier.fillMaxSize().padding(horizontal = NavaSpacing.Md),
@@ -885,21 +1242,725 @@ private fun NowPlayingArtwork(
     }
 }
 
-@Composable private fun LibraryShell(modifier: Modifier, viewModel: LibraryViewModel = hiltViewModel(), likesViewModel: LikesViewModel) {
- val state by viewModel.state.collectAsState()
- val likes by likesViewModel.state.collectAsState()
- Column(modifier = modifier.fillMaxSize().padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
-  Text(stringResource(R.string.library_title), style = MaterialTheme.typography.headlineSmall)
-  when (val current = state) {
-   LibraryUiState.Loading -> CircularProgressIndicator()
-   LibraryUiState.Error -> { Text(stringResource(R.string.library_error)); Button(onClick = viewModel::reload) { Text(stringResource(R.string.retry)) } }
-   is LibraryUiState.Content -> {
-    Text(stringResource(R.string.liked_count, likes.songs.size.toLong()), style = MaterialTheme.typography.titleMedium)
-    if (likes.songs.isEmpty()) Text(stringResource(R.string.liked_songs_empty)) else LazyColumn(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) { items(likes.songs, key = { it.id }) { song -> Card { Row(Modifier.fillMaxWidth().padding(NavaSpacing.Md), verticalAlignment = Alignment.CenterVertically) { Text(song.title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium); Button(onClick = { likesViewModel.remove(song.id) }) { Text(stringResource(R.string.unlike_song)) } } } } }
-    if (current.summary.playlists.isEmpty()) Text(stringResource(R.string.library_empty)) else LazyColumn(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) { items(current.summary.playlists, key = { it.id }) { playlist -> Card { Column(Modifier.padding(NavaSpacing.Md)) { Text(playlist.title, style = MaterialTheme.typography.titleMedium); playlist.description?.let { Text(it) } } } } }
-   }
-  }
- }
+@Composable
+private fun LibraryShell(
+    modifier: Modifier,
+    likesViewModel: LikesViewModel,
+    currentTrackId: String?,
+    onTrackClick: (HomeTrack) -> Unit,
+    onTrackOptions: (HomeTrack) -> Unit,
+    viewModel: LibraryViewModel = hiltViewModel(),
+) {
+    val state by viewModel.state.collectAsState()
+    val likes by likesViewModel.state.collectAsState()
+    var editorOpen by remember { mutableStateOf(false) }
+    var editorPlaylist by remember { mutableStateOf<UserPlaylist?>(null) }
+    var deleteCandidate by remember { mutableStateOf<UserPlaylist?>(null) }
+    var trackActionCandidate by remember { mutableStateOf<PlaylistTrack?>(null) }
+    var trackPickerOpen by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = state.selectedPlaylist != null) { viewModel.closePlaylist() }
+
+    val selectedPlaylist = state.selectedPlaylist
+    Box(modifier = modifier.fillMaxSize()) {
+        when {
+            state.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+            state.failed -> SearchMessage(
+                title = stringResource(R.string.library_error),
+                body = stringResource(R.string.library_error_hint),
+                action = { Button(onClick = viewModel::reload) { Text(stringResource(R.string.retry)) } },
+            )
+            selectedPlaylist != null -> PlaylistDetailsScreen(
+                details = selectedPlaylist,
+                currentTrackId = currentTrackId,
+                busy = state.busy || state.loadingDetails,
+                onBack = viewModel::closePlaylist,
+                onEdit = {
+                    editorPlaylist = selectedPlaylist.playlist
+                    editorOpen = true
+                },
+                onAddTracks = {
+                    trackPickerOpen = true
+                    viewModel.loadCatalog()
+                },
+                onTrackClick = { onTrackClick(it.toHomeTrack()) },
+                onTrackOptions = { trackActionCandidate = it },
+            )
+            else -> PlaylistOverviewScreen(
+                playlists = state.summary.playlists,
+                likedCount = likes.songs.size,
+                onCreate = {
+                    editorPlaylist = null
+                    editorOpen = true
+                },
+                onOpen = viewModel::openPlaylist,
+                onEdit = {
+                    editorPlaylist = it
+                    editorOpen = true
+                },
+            )
+        }
+        if (state.busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter))
+    }
+
+    if (editorOpen) {
+        PlaylistEditorDialog(
+            playlist = editorPlaylist,
+            busy = state.busy,
+            onDismiss = { editorOpen = false },
+            onSave = { title, description, isPublic, coverUri ->
+                editorPlaylist?.let { viewModel.updatePlaylist(it.id, title, description, isPublic, coverUri) }
+                    ?: viewModel.createPlaylist(title, description, isPublic, coverUri)
+                editorOpen = false
+            },
+            onDelete = editorPlaylist?.let { playlist ->
+                {
+                    editorOpen = false
+                    deleteCandidate = playlist
+                }
+            },
+        )
+    }
+
+    deleteCandidate?.let { playlist ->
+        AlertDialog(
+            onDismissRequest = { deleteCandidate = null },
+            icon = {
+                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.errorContainer) {
+                    Icon(
+                        Icons.Outlined.Delete,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(NavaSpacing.Md),
+                    )
+                }
+            },
+            title = { Text(stringResource(R.string.delete_playlist), fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                    Text(stringResource(R.string.delete_playlist_confirmation, playlist.title))
+                    Text(
+                        stringResource(R.string.delete_playlist_warning),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deletePlaylist(playlist.id)
+                        deleteCandidate = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ),
+                ) {
+                    Icon(Icons.Outlined.Delete, contentDescription = null)
+                    Spacer(Modifier.width(NavaSpacing.Xs))
+                    Text(stringResource(R.string.delete))
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { deleteCandidate = null }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+
+    trackActionCandidate?.let { track ->
+        PlaylistTrackActionsDialog(
+            track = track,
+            onDismiss = { trackActionCandidate = null },
+            onPlay = {
+                onTrackClick(track.toHomeTrack())
+                trackActionCandidate = null
+            },
+            onMore = {
+                onTrackOptions(track.toHomeTrack())
+                trackActionCandidate = null
+            },
+            onRemove = {
+                viewModel.removeTrack(track.id)
+                trackActionCandidate = null
+            },
+        )
+    }
+
+    if (trackPickerOpen) {
+        PlaylistTrackPicker(
+            catalog = state.catalog,
+            existingTrackIds = state.selectedPlaylist?.tracks.orEmpty().mapTo(mutableSetOf(), PlaylistTrack::id),
+            loading = state.busy && state.catalog.isEmpty(),
+            onDismiss = { trackPickerOpen = false },
+            onAdd = viewModel::addTrack,
+        )
+    }
+
+    if (state.operationFailed) {
+        AlertDialog(
+            onDismissRequest = viewModel::clearOperationError,
+            title = { Text(stringResource(R.string.playlist_action_failed)) },
+            text = { Text(stringResource(R.string.playlist_action_failed_hint)) },
+            confirmButton = {
+                Button(onClick = viewModel::clearOperationError) { Text(stringResource(R.string.close)) }
+            },
+        )
+    }
+}
+
+@Composable
+private fun PlaylistOverviewScreen(
+    playlists: List<UserPlaylist>,
+    likedCount: Int,
+    onCreate: () -> Unit,
+    onOpen: (String) -> Unit,
+    onEdit: (UserPlaylist) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            start = NavaSpacing.Lg,
+            end = NavaSpacing.Lg,
+            top = NavaSpacing.Lg,
+            bottom = NavaSpacing.Xxl,
+        ),
+        verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+    ) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.library_title), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        stringResource(R.string.playlist_library_subtitle),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Button(onClick = onCreate) {
+                    Icon(Icons.Outlined.Add, contentDescription = null)
+                    Spacer(Modifier.width(NavaSpacing.Sm))
+                    Text(stringResource(R.string.new_playlist))
+                }
+            }
+        }
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.large,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Lg),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+                ) {
+                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(56.dp)) {
+                        Icon(
+                            Icons.Outlined.Favorite,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.padding(NavaSpacing.Md),
+                        )
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.liked_songs), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.track_count, likedCount.toLong()), color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                }
+            }
+        }
+        item {
+            Text(stringResource(R.string.your_playlists), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+        if (playlists.isEmpty()) {
+            item { EmptyPlaylistsCard(onCreate) }
+        } else {
+            items(playlists, key = UserPlaylist::id) { playlist ->
+                UserPlaylistCard(playlist, onOpen = { onOpen(playlist.id) }, onEdit = { onEdit(playlist) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyPlaylistsCard(onCreate: () -> Unit) {
+    Card(
+        onClick = onCreate,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Xl),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+        ) {
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.size(72.dp)) {
+                Icon(Icons.Outlined.PlaylistAdd, contentDescription = null, modifier = Modifier.padding(NavaSpacing.Lg))
+            }
+            Text(stringResource(R.string.no_playlists_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(
+                stringResource(R.string.no_playlists_hint),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Composable
+private fun UserPlaylistCard(playlist: UserPlaylist, onOpen: () -> Unit, onEdit: () -> Unit) {
+    Card(
+        onClick = onOpen,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            PlaylistArtwork(playlist.coverImageUrl, playlist.title, Modifier.size(82.dp))
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
+                Text(playlist.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                playlist.description?.let {
+                    Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        if (playlist.isPublic) Icons.Outlined.Public else Icons.Outlined.Lock,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(stringResource(R.string.track_count, playlist.trackCount.toLong()), style = MaterialTheme.typography.labelLarge)
+                }
+            }
+            IconButton(onClick = onEdit) { Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.edit_playlist)) }
+            Icon(Icons.Outlined.ChevronRight, contentDescription = null)
+        }
+    }
+}
+
+@Composable
+private fun PlaylistDetailsScreen(
+    details: com.example.nava.domain.library.PlaylistDetails,
+    currentTrackId: String?,
+    busy: Boolean,
+    onBack: () -> Unit,
+    onEdit: () -> Unit,
+    onAddTracks: () -> Unit,
+    onTrackClick: (PlaylistTrack) -> Unit,
+    onTrackOptions: (PlaylistTrack) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            start = NavaSpacing.Lg,
+            end = NavaSpacing.Lg,
+            top = NavaSpacing.Md,
+            bottom = NavaSpacing.Xxl,
+        ),
+        verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+    ) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBack, contentDescription = stringResource(R.string.back)) }
+                Text(stringResource(R.string.playlist_details), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                IconButton(onClick = onEdit) { Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.edit_playlist)) }
+            }
+        }
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Lg),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+                ) {
+                    PlaylistArtwork(details.playlist.coverImageUrl, details.playlist.title, Modifier.size(156.dp))
+                    Text(details.playlist.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    details.playlist.description?.let {
+                        Text(it, color = MaterialTheme.colorScheme.onPrimaryContainer, textAlign = TextAlign.Center)
+                    }
+                    Text(
+                        stringResource(
+                            if (details.playlist.isPublic) R.string.public_playlist_summary else R.string.private_playlist_summary,
+                            details.tracks.size.toLong(),
+                        ),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Button(onClick = onAddTracks, enabled = !busy) {
+                        Icon(Icons.Outlined.PlaylistAdd, contentDescription = null)
+                        Spacer(Modifier.width(NavaSpacing.Sm))
+                        Text(stringResource(R.string.add_songs))
+                    }
+                }
+            }
+        }
+        item {
+            Text(stringResource(R.string.playlist_songs), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+        if (details.tracks.isEmpty()) {
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Xl),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+                    ) {
+                        Icon(Icons.Outlined.MusicNote, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
+                        Text(stringResource(R.string.playlist_no_songs), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.playlist_no_songs_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                    }
+                }
+            }
+        } else {
+            items(details.tracks, key = PlaylistTrack::id) { track ->
+                PlaylistTrackRow(
+                    track = track,
+                    isCurrent = track.id == currentTrackId,
+                    onClick = { onTrackClick(track) },
+                    onOptions = { onTrackOptions(track) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaylistArtwork(url: String?, title: String, modifier: Modifier = Modifier) {
+    Surface(modifier = modifier, shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.secondaryContainer) {
+        if (url.isNullOrBlank()) {
+            Icon(Icons.Outlined.QueueMusic, contentDescription = null, modifier = Modifier.padding(NavaSpacing.Lg), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+        } else {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current).data(url).crossfade(true).build(),
+                contentDescription = stringResource(R.string.playlist_cover, title),
+                contentScale = ContentScale.Crop,
+                error = painterResource(R.drawable.ic_launcher_foreground),
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlaylistTrackRow(track: PlaylistTrack, isCurrent: Boolean, onClick: () -> Unit, onOptions: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            Box {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current).data(track.coverImageUrl).crossfade(true).build(),
+                    contentDescription = stringResource(R.string.track_artwork, track.title),
+                    contentScale = ContentScale.Crop,
+                    error = painterResource(R.drawable.ic_launcher_foreground),
+                    modifier = Modifier.size(NavaDimensions.SearchTrackArtworkSize).clip(MaterialTheme.shapes.medium),
+                )
+                Surface(
+                    modifier = Modifier.align(Alignment.BottomEnd).size(NavaDimensions.SearchPlayBadgeSize),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary,
+                ) {
+                    Icon(Icons.Outlined.PlayArrow, contentDescription = null, modifier = Modifier.padding(NavaSpacing.Xs), tint = MaterialTheme.colorScheme.onPrimary)
+                }
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
+                Text(track.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(track.artistName, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(formatTrackDuration(track.durationSeconds), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            }
+            IconButton(onClick = onOptions) { Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.track_more_options, track.title)) }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun PlaylistEditorDialog(
+    playlist: UserPlaylist?,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (String, String?, Boolean, Uri?) -> Unit,
+    onDelete: (() -> Unit)?,
+) {
+    var title by remember(playlist?.id) { mutableStateOf(playlist?.title.orEmpty()) }
+    var description by remember(playlist?.id) { mutableStateOf(playlist?.description.orEmpty()) }
+    var isPublic by remember(playlist?.id) { mutableStateOf(playlist?.isPublic ?: false) }
+    var selectedCover by remember(playlist?.id) { mutableStateOf<Uri?>(null) }
+    val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        selectedCover = uri
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = NavaSpacing.Lg)
+                .navigationBarsPadding(),
+            verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
+                    Icon(
+                        if (playlist == null) Icons.Outlined.PlaylistAdd else Icons.Outlined.Edit,
+                        contentDescription = null,
+                        modifier = Modifier.padding(NavaSpacing.Sm),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+                Spacer(Modifier.width(NavaSpacing.Md))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        stringResource(if (playlist == null) R.string.create_playlist else R.string.edit_playlist),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        stringResource(R.string.playlist_editor_subtitle),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Clear, contentDescription = stringResource(R.string.close)) }
+            }
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+            ) {
+                Box {
+                    PlaylistEditorArtwork(
+                        model = selectedCover ?: playlist?.coverImageUrl,
+                        title = title.ifBlank { stringResource(R.string.playlist_details) },
+                        modifier = Modifier.size(140.dp),
+                    )
+                    Surface(
+                        onClick = { coverPicker.launch("image/*") },
+                        modifier = Modifier.align(Alignment.BottomEnd).size(44.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary,
+                        shadowElevation = 6.dp,
+                    ) {
+                        Icon(
+                            Icons.Outlined.Edit,
+                            contentDescription = stringResource(R.string.change_playlist_cover),
+                            modifier = Modifier.padding(NavaSpacing.Sm),
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    }
+                }
+                FilledTonalButton(onClick = { coverPicker.launch("image/*") }) {
+                    Icon(Icons.Outlined.Edit, contentDescription = null)
+                    Spacer(Modifier.width(NavaSpacing.Xs))
+                    Text(stringResource(if (selectedCover == null && playlist?.coverImageUrl.isNullOrBlank()) R.string.choose_playlist_cover else R.string.change_playlist_cover))
+                }
+                Text(
+                    stringResource(R.string.playlist_cover_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            OutlinedTextField(
+                value = title,
+                onValueChange = { if (it.length <= 120) title = it },
+                label = { Text(stringResource(R.string.playlist_name)) },
+                supportingText = { Text("${title.length}/120") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = description,
+                onValueChange = { description = it },
+                label = { Text(stringResource(R.string.playlist_description)) },
+                minLines = 2,
+                maxLines = 3,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Md),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+                ) {
+                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer) {
+                        Icon(
+                            if (isPublic) Icons.Outlined.Public else Icons.Outlined.Lock,
+                            contentDescription = null,
+                            modifier = Modifier.padding(NavaSpacing.Sm),
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.public_playlist), fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.public_playlist_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = isPublic, onCheckedChange = { isPublic = it })
+                }
+            }
+
+            Button(
+                enabled = title.isNotBlank() && !busy,
+                onClick = { onSave(title.trim(), description.trim().takeIf(String::isNotEmpty), isPublic, selectedCover) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Outlined.Check, contentDescription = null)
+                Spacer(Modifier.width(NavaSpacing.Sm))
+                Text(stringResource(R.string.save_changes))
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                onDelete?.let {
+                    OutlinedButton(
+                        onClick = it,
+                        enabled = !busy,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    ) {
+                        Icon(Icons.Outlined.Delete, contentDescription = null)
+                        Spacer(Modifier.width(NavaSpacing.Xs))
+                        Text(stringResource(R.string.delete_playlist_action))
+                    }
+                }
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.cancel)) }
+            }
+            Spacer(Modifier.height(NavaSpacing.Md))
+        }
+    }
+}
+
+@Composable
+private fun PlaylistEditorArtwork(model: Any?, title: String, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shadowElevation = 8.dp,
+    ) {
+        if (model == null) {
+            Icon(
+                Icons.Outlined.QueueMusic,
+                contentDescription = null,
+                modifier = Modifier.padding(NavaSpacing.Xl),
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+        } else {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current).data(model).crossfade(true).build(),
+                contentDescription = stringResource(R.string.playlist_cover, title),
+                contentScale = ContentScale.Crop,
+                error = painterResource(R.drawable.ic_launcher_foreground),
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlaylistTrackActionsDialog(
+    track: PlaylistTrack,
+    onDismiss: () -> Unit,
+    onPlay: () -> Unit,
+    onMore: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(track.title, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                SongActionRow(Icons.Outlined.PlayArrow, stringResource(R.string.play_now), onClick = onPlay)
+                SongActionRow(Icons.Outlined.MoreVert, stringResource(R.string.more_song_actions), onClick = onMore)
+                SongActionRow(Icons.Outlined.Delete, stringResource(R.string.remove_from_playlist), onClick = onRemove)
+            }
+        },
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PlaylistTrackPicker(
+    catalog: List<PlaylistTrack>,
+    existingTrackIds: Set<String>,
+    loading: Boolean,
+    onDismiss: () -> Unit,
+    onAdd: (String) -> Unit,
+) {
+    var query by remember { mutableStateOf("") }
+    val filtered = remember(catalog, query) {
+        catalog.filter { query.isBlank() || it.title.contains(query, true) || it.artistName.contains(query, true) }
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = NavaSpacing.Lg),
+            verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            Text(stringResource(R.string.add_songs), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = { Text(stringResource(R.string.search_playlist_songs)) },
+                leadingIcon = { Icon(Icons.Outlined.ManageSearch, contentDescription = null) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            when {
+                loading -> Box(Modifier.fillMaxWidth().height(320.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                filtered.isEmpty() -> Box(Modifier.fillMaxWidth().height(240.dp), contentAlignment = Alignment.Center) {
+                    Text(stringResource(R.string.no_tracks_found), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                else -> LazyColumn(
+                    modifier = Modifier.fillMaxWidth().height(420.dp),
+                    verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = NavaSpacing.Xl),
+                ) {
+                    items(filtered, key = PlaylistTrack::id) { track ->
+                        val added = track.id in existingTrackIds
+                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Sm),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+                            ) {
+                                AsyncImage(
+                                    model = track.coverImageUrl,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.size(56.dp).clip(MaterialTheme.shapes.medium),
+                                )
+                                Column(Modifier.weight(1f)) {
+                                    Text(track.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(track.artistName, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                FilledTonalButton(onClick = { onAdd(track.id) }, enabled = !added) {
+                                    Icon(if (added) Icons.Outlined.Check else Icons.Outlined.Add, contentDescription = null)
+                                    Spacer(Modifier.width(NavaSpacing.Xs))
+                                    Text(stringResource(if (added) R.string.added else R.string.add))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -1171,11 +2232,37 @@ private fun formatTrackDuration(durationSeconds: Int): String =
 private fun HomeShell(
     modifier: Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
+    quickViewModel: HomeQuickViewModel = hiltViewModel(),
+    likedTracks: List<HomeTrack>,
+    currentTrackId: String?,
     onPlay: (HomeTrack) -> Unit,
     onQueue: (HomeTrack) -> Unit,
+    onTrackOptions: (HomeTrack) -> Unit,
+    onOpenMyPlaylists: () -> Unit,
+    onOpenTopPlaylists: () -> Unit,
     onShuffleSource: (List<HomeTrack>) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
+    val quickState by quickViewModel.state.collectAsState()
+    var quickCollection by rememberSaveable { mutableStateOf<HomeQuickCollection?>(null) }
+    quickCollection?.let { collection ->
+        HomeCollectionScreen(
+            modifier = modifier,
+            title = stringResource(if (collection == HomeQuickCollection.LIKED) R.string.quick_liked else R.string.quick_recent),
+            subtitle = stringResource(if (collection == HomeQuickCollection.LIKED) R.string.liked_collection_subtitle else R.string.recent_collection_subtitle),
+            tracks = if (collection == HomeQuickCollection.LIKED) likedTracks else quickState.recentTracks,
+            loading = collection == HomeQuickCollection.RECENT && quickState.loadingRecent,
+            failed = collection == HomeQuickCollection.RECENT && quickState.recentFailed,
+            emptyTitle = if (collection == HomeQuickCollection.LIKED) R.string.liked_collection_empty else R.string.recent_collection_empty,
+            emptyHint = if (collection == HomeQuickCollection.LIKED) R.string.liked_collection_empty_hint else R.string.recent_collection_empty_hint,
+            currentTrackId = currentTrackId,
+            onBack = { quickCollection = null },
+            onRetry = quickViewModel::reloadRecent,
+            onPlay = onPlay,
+            onOptions = onTrackOptions,
+        )
+        return
+    }
     (state as? HomeUiState.Content)?.feed?.let { feed ->
         LaunchedEffect(feed) {
             onShuffleSource(
@@ -1208,7 +2295,18 @@ private fun HomeShell(
         when (val current = state) {
             HomeUiState.Loading -> item { HomeLoading() }
             HomeUiState.Error -> item { HomeError(onRetry = viewModel::reload) }
-            is HomeUiState.Content -> homeContent(current, onPlay, onQueue)
+            is HomeUiState.Content -> homeContent(
+                state = current,
+                onPlay = onPlay,
+                onQueue = onQueue,
+                onLiked = { quickCollection = HomeQuickCollection.LIKED },
+                onRecent = {
+                    quickViewModel.reloadRecent()
+                    quickCollection = HomeQuickCollection.RECENT
+                },
+                onMyPlaylists = onOpenMyPlaylists,
+                onTopPlaylists = onOpenTopPlaylists,
+            )
         }
     }
 }
@@ -1217,6 +2315,10 @@ private fun androidx.compose.foundation.lazy.LazyListScope.homeContent(
     state: HomeUiState.Content,
     onPlay: (HomeTrack) -> Unit,
     onQueue: (HomeTrack) -> Unit,
+    onLiked: () -> Unit,
+    onRecent: () -> Unit,
+    onMyPlaylists: () -> Unit,
+    onTopPlaylists: () -> Unit,
 ) {
     if (
         state.feed.featured.isEmpty() &&
@@ -1251,15 +2353,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.homeContent(
         }
     }
     item {
-        LazyRow(
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NavaSpacing.Lg),
-            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
-        ) {
-            item { QuickAction(R.string.quick_liked, Icons.Outlined.FavoriteBorder) }
-            item { QuickAction(R.string.quick_recent, Icons.Outlined.History) }
-            item { QuickAction(R.string.quick_playlists, Icons.Outlined.QueueMusic) }
-            item { QuickAction(R.string.quick_artists, Icons.Outlined.Groups) }
-        }
+        QuickActionsGrid(onLiked, onRecent, onMyPlaylists, onTopPlaylists)
     }
     item { DiscoverySection(R.string.home_trending, state.feed.trending, onPlay, onQueue) }
     item { DiscoverySection(R.string.home_newest, state.feed.newest, onPlay, onQueue) }
@@ -1288,43 +2382,200 @@ private fun HomeError(onRetry: () -> Unit) {
 }
 
 @Composable
-private fun DownloadsShell(modifier: Modifier, state: DownloadsUiState, viewModel: DownloadViewModel) {
-    Column(modifier = modifier.fillMaxSize().padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
-        Text(stringResource(R.string.downloads), style = MaterialTheme.typography.headlineSmall)
+private fun DownloadsShell(
+    modifier: Modifier,
+    state: DownloadsUiState,
+    currentTrackId: String?,
+    viewModel: DownloadViewModel,
+    onPlay: (OfflineTrackEntity) -> Unit,
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            start = NavaSpacing.Lg,
+            end = NavaSpacing.Lg,
+            top = NavaSpacing.Lg,
+            bottom = NavaSpacing.Xxl,
+        ),
+        verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+    ) {
+        item {
+            Text(stringResource(R.string.downloads), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(NavaSpacing.Xs))
+            Text(
+                stringResource(R.string.downloads_subtitle),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         if (state.downloads.isEmpty() && state.activeDownloads.isEmpty()) {
-            Text(stringResource(R.string.downloads_empty))
-        } else LazyColumn(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-            items(state.activeDownloads, key = { "active-${it.trackId}" }) { track ->
-                Card {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Md),
-                        verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
-                    ) {
-                        Text(track.title, style = MaterialTheme.typography.titleMedium)
-                        Text(track.artistName, style = MaterialTheme.typography.bodyMedium)
-                        LinearProgressIndicator(
-                            progress = { track.progressPercent / 100f },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Text(stringResource(R.string.download_progress, track.progressPercent), style = MaterialTheme.typography.labelMedium)
-                    }
+            item { DownloadsEmptyCard() }
+        } else {
+            if (state.activeDownloads.isNotEmpty()) {
+                item { Text(stringResource(R.string.downloading_now), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+                items(state.activeDownloads, key = { "active-${it.trackId}" }) { track ->
+                    ActiveDownloadCard(track)
                 }
             }
-            items(state.downloads, key = { it.trackId }) { track ->
-                val dismissState = rememberSwipeToDismissBoxState(confirmValueChange = { value ->
-                    if (value != SwipeToDismissBoxValue.Settled) viewModel.remove(track)
-                    value != SwipeToDismissBoxValue.Settled
-                })
-                SwipeToDismissBox(state = dismissState, backgroundContent = { Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.errorContainer) {} }) {
-                    Card { Row(Modifier.fillMaxWidth().padding(NavaSpacing.Md), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) { Text(track.title, style = MaterialTheme.typography.titleMedium); Text(track.artistName) }
-                        Button(onClick = { viewModel.remove(track) }) { Text(stringResource(R.string.remove_download)) }
-                    } }
+            if (state.downloads.isNotEmpty()) {
+                item { Text(stringResource(R.string.available_offline), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+                items(state.downloads, key = OfflineTrackEntity::trackId) { track ->
+                    val dismissState = rememberSwipeToDismissBoxState(confirmValueChange = { value ->
+                        if (value == SwipeToDismissBoxValue.EndToStart) {
+                            viewModel.remove(track)
+                            true
+                        } else value == SwipeToDismissBoxValue.Settled
+                    })
+                    SwipeToDismissBox(
+                        state = dismissState,
+                        enableDismissFromStartToEnd = false,
+                        enableDismissFromEndToStart = true,
+                        backgroundContent = {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(MaterialTheme.shapes.large)
+                                    .background(MaterialTheme.colorScheme.errorContainer)
+                                    .padding(horizontal = NavaSpacing.Lg),
+                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    stringResource(R.string.swipe_to_remove),
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                                Spacer(Modifier.width(NavaSpacing.Sm))
+                                Icon(
+                                    Icons.Outlined.Delete,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                                )
+                            }
+                        },
+                    ) {
+                        DownloadedTrackCard(
+                            track = track,
+                            isCurrent = track.trackId == currentTrackId,
+                            onClick = { onPlay(track) },
+                        )
+                    }
                 }
             }
         }
     }
 }
+
+@Composable
+private fun DownloadsEmptyCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Xl),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+        ) {
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(80.dp)) {
+                Icon(
+                    Icons.Outlined.DownloadDone,
+                    contentDescription = null,
+                    modifier = Modifier.padding(NavaSpacing.Lg),
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+            Text(stringResource(R.string.downloads_empty_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(
+                stringResource(R.string.downloads_empty_hint),
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ActiveDownloadCard(track: com.example.nava.data.downloads.DownloadTransfer) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            AsyncImage(
+                model = track.coverImageUrl,
+                contentDescription = stringResource(R.string.track_artwork, track.title),
+                contentScale = ContentScale.Crop,
+                error = painterResource(R.drawable.ic_launcher_foreground),
+                modifier = Modifier.size(NavaDimensions.SearchTrackArtworkSize).clip(MaterialTheme.shapes.medium),
+            )
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
+                Text(track.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(track.artistName, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                LinearProgressIndicator(progress = { track.progressPercent / 100f }, modifier = Modifier.fillMaxWidth())
+                Text(stringResource(R.string.download_progress, track.progressPercent), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DownloadedTrackCard(track: OfflineTrackEntity, isCurrent: Boolean, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = NavaSpacing.Xs),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            Box {
+                AsyncImage(
+                    model = track.coverImageUrl,
+                    contentDescription = stringResource(R.string.track_artwork, track.title),
+                    contentScale = ContentScale.Crop,
+                    error = painterResource(R.drawable.ic_launcher_foreground),
+                    modifier = Modifier.size(NavaDimensions.SearchTrackArtworkSize).clip(MaterialTheme.shapes.medium),
+                )
+                Surface(
+                    modifier = Modifier.align(Alignment.BottomEnd).size(NavaDimensions.SearchPlayBadgeSize),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary,
+                ) {
+                    Icon(
+                        Icons.Outlined.PlayArrow,
+                        contentDescription = stringResource(R.string.play_downloaded_track, track.title),
+                        modifier = Modifier.padding(NavaSpacing.Xs),
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                    )
+                }
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
+                Text(track.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(track.artistName, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    stringResource(R.string.downloaded_file_size, formatDownloadSize(track.byteCount)),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Icon(
+                Icons.Outlined.DownloadDone,
+                contentDescription = stringResource(R.string.available_offline),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+}
+
+private fun formatDownloadSize(byteCount: Long): String =
+    DecimalFormat("0.0").format(byteCount / (1024.0 * 1024.0))
 
 @Composable
 private fun FeaturedCard(
@@ -1458,37 +2709,169 @@ private fun DiscoverySection(
 }
 
 @Composable
-private fun QuickAction(@StringRes label: Int, icon: ImageVector) {
+private fun QuickActionsGrid(
+    onLiked: () -> Unit,
+    onRecent: () -> Unit,
+    onMyPlaylists: () -> Unit,
+    onTopPlaylists: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = NavaSpacing.Lg),
+        verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+            QuickAction(R.string.quick_liked, R.string.quick_liked_subtitle, Icons.Outlined.FavoriteBorder, Modifier.weight(1f), onLiked)
+            QuickAction(R.string.quick_recent, R.string.quick_recent_subtitle, Icons.Outlined.History, Modifier.weight(1f), onRecent)
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+            QuickAction(R.string.quick_playlists, R.string.quick_playlists_subtitle, Icons.Outlined.QueueMusic, Modifier.weight(1f), onMyPlaylists)
+            QuickAction(R.string.quick_top_playlists, R.string.quick_top_playlists_subtitle, Icons.Outlined.Public, Modifier.weight(1f), onTopPlaylists)
+        }
+    }
+}
+
+@Composable
+private fun QuickAction(
+    @StringRes label: Int,
+    @StringRes subtitle: Int,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
     Surface(
-        onClick = {},
-        modifier = Modifier
-            .width(NavaDimensions.HomeQuickActionWidth)
-            .height(NavaDimensions.HomeQuickActionHeight),
+        onClick = onClick,
+        modifier = modifier.height(104.dp),
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         contentColor = MaterialTheme.colorScheme.onSurface,
+        shadowElevation = NavaSpacing.Xs,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(NavaSpacing.Md),
+            verticalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    modifier = Modifier.size(38.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
+                    }
+                }
+                Spacer(Modifier.weight(1f))
+                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            }
+            Column {
+                Text(text = stringResource(label), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(text = stringResource(subtitle), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+private enum class HomeQuickCollection { LIKED, RECENT }
+
+@Composable
+private fun HomeCollectionScreen(
+    modifier: Modifier,
+    title: String,
+    subtitle: String,
+    tracks: List<HomeTrack>,
+    loading: Boolean,
+    failed: Boolean,
+    @StringRes emptyTitle: Int,
+    @StringRes emptyHint: Int,
+    currentTrackId: String?,
+    onBack: () -> Unit,
+    onRetry: () -> Unit,
+    onPlay: (HomeTrack) -> Unit,
+    onOptions: (HomeTrack) -> Unit,
+) {
+    BackHandler(onBack = onBack)
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            start = NavaSpacing.Lg,
+            end = NavaSpacing.Lg,
+            top = NavaSpacing.Sm,
+            bottom = NavaSpacing.Xxl,
+        ),
+        verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+    ) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBack, contentDescription = stringResource(R.string.back)) }
+                Column(Modifier.weight(1f)) {
+                    Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        when {
+            loading -> item { Box(Modifier.fillParentMaxHeight(.55f).fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+            failed -> item { HomeCollectionMessage(R.string.home_collection_error, R.string.home_collection_error_hint, onRetry) }
+            tracks.isEmpty() -> item { HomeCollectionMessage(emptyTitle, emptyHint) }
+            else -> items(tracks, key = HomeTrack::id) { track ->
+                HomeCollectionTrackRow(
+                    track = track,
+                    isCurrent = track.id == currentTrackId,
+                    onClick = { onPlay(track) },
+                    onOptions = { onOptions(track) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeCollectionMessage(@StringRes title: Int, @StringRes hint: Int, onRetry: (() -> Unit)? = null) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Xl),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+        ) {
+            Icon(Icons.Outlined.MusicNote, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
+            Text(stringResource(title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            Text(stringResource(hint), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+            onRetry?.let { Button(onClick = it) { Text(stringResource(R.string.retry)) } }
+        }
+    }
+}
+
+@Composable
+private fun HomeCollectionTrackRow(track: HomeTrack, isCurrent: Boolean, onClick: () -> Unit, onOptions: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
     ) {
         Row(
-            modifier = Modifier.fillMaxSize().padding(NavaSpacing.Md),
+            modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Sm),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
         ) {
-            Surface(
-                modifier = Modifier.size(NavaDimensions.HomeTopBarLogoSize),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(icon, contentDescription = null, modifier = Modifier.size(NavaSpacing.Xl))
+            Box {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current).data(track.coverImageUrl).crossfade(true).build(),
+                    contentDescription = stringResource(R.string.track_artwork, track.title),
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(NavaDimensions.SearchTrackArtworkSize).clip(MaterialTheme.shapes.medium),
+                )
+                Surface(modifier = Modifier.align(Alignment.BottomEnd).size(28.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary) {
+                    Icon(Icons.Outlined.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.padding(NavaSpacing.Xs))
                 }
             }
-            Text(
-                text = stringResource(label),
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                maxLines = 2,
-            )
+            Column(Modifier.weight(1f)) {
+                Text(track.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(track.artistName, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            IconButton(onClick = onOptions) { Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.track_more_options, track.title)) }
         }
     }
 }
@@ -1506,50 +2889,199 @@ private fun PlaceholderShell(@StringRes title: Int, modifier: Modifier) {
 private fun ProfileShell(
     session: AuthSession,
     modifier: Modifier,
-    onDiscoverPeople: () -> Unit,
+    onOpenSocial: (SocialSection) -> Unit,
     viewModel: ProfileViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
     val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let(viewModel::uploadAvatar)
+        uri?.let(viewModel::selectAvatar)
     }
-    Column(modifier = modifier.fillMaxSize().padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Lg)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
-            Button(onClick = { avatarPicker.launch("image/*") }, enabled = !state.isSaving) {
-                state.avatarUrl?.let { url ->
-                    AsyncImage(
-                        model = ImageRequest.Builder(context)
-                            .data(url)
-                            .memoryCacheKey(state.avatarPath)
-                            .diskCacheKey(state.avatarPath)
-                            .build(),
-                        contentDescription = stringResource(R.string.user_avatar),
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.size(NavaSpacing.Xxl).clip(CircleShape),
+    if (state.isLoading) {
+        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+    } else {
+        LazyColumn(
+            modifier = modifier.fillMaxSize(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(NavaSpacing.Lg),
+            verticalArrangement = Arrangement.spacedBy(NavaSpacing.Lg),
+        ) {
+            item {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs),
+                ) {
+                    Box(modifier = Modifier.size(NavaDimensions.ProfileAvatarCanvasSize)) {
+                        UserAvatar(
+                            model = ImageRequest.Builder(context)
+                                .data(state.pendingAvatarUri ?: state.avatarUrl)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = stringResource(R.string.user_avatar),
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .size(NavaDimensions.ProfileAvatarSize)
+                                .border(
+                                    NavaDimensions.ProfileAvatarBorderWidth,
+                                    MaterialTheme.colorScheme.primary,
+                                    CircleShape,
+                                ),
+                        )
+                        if (state.isEditing) {
+                            Surface(
+                                modifier = Modifier.align(Alignment.BottomEnd).size(NavaDimensions.ProfileAvatarActionSize),
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shadowElevation = NavaSpacing.Xs,
+                            ) {
+                                IconButton(
+                                    onClick = { avatarPicker.launch("image/*") },
+                                    enabled = !state.isSaving,
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.Edit,
+                                        contentDescription = stringResource(R.string.edit_profile_photo),
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    )
+                                }
+                            }
+                        }
+                        if (state.hasChanges) {
+                            Surface(
+                                modifier = Modifier.align(Alignment.BottomStart).size(NavaDimensions.ProfileAvatarActionSize),
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primary,
+                                shadowElevation = NavaSpacing.Xs,
+                            ) {
+                                IconButton(
+                                    onClick = viewModel::saveProfile,
+                                    enabled = !state.isSaving && state.displayName.trim().length in 2..60,
+                                ) {
+                                    if (state.isSaving) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(NavaSpacing.Xl),
+                                            color = MaterialTheme.colorScheme.onPrimary,
+                                            strokeWidth = NavaDimensions.AuthProgressStrokeWidth,
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.Outlined.Check,
+                                            contentDescription = stringResource(R.string.confirm_profile_changes),
+                                            tint = MaterialTheme.colorScheme.onPrimary,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Text(
+                        text = state.displayName,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
                     )
-                } ?: Icon(Icons.Outlined.AccountCircle, contentDescription = stringResource(R.string.user_avatar), modifier = Modifier.size(NavaSpacing.Xxl))
+                    Text(
+                        text = session.email,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                    Surface(
+                        shape = MaterialTheme.shapes.large,
+                        color = if (state.isPremium) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surfaceContainerHigh,
+                    ) {
+                        Text(
+                            text = stringResource(if (state.isPremium) R.string.premium_member else R.string.standard_member),
+                            modifier = Modifier.padding(horizontal = NavaSpacing.Md, vertical = NavaSpacing.Xs),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = if (state.isPremium) MaterialTheme.colorScheme.onPrimaryContainer
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (!state.isEditing) {
+                        FilledTonalButton(onClick = viewModel::startEditing) {
+                            Icon(Icons.Outlined.Edit, contentDescription = null)
+                            Spacer(Modifier.size(NavaSpacing.Sm))
+                            Text(stringResource(R.string.edit_profile))
+                        }
+                    }
+                }
             }
-            Column {
-                Text(if (state.isLoading) stringResource(R.string.profile_loading) else state.displayName, style = MaterialTheme.typography.titleLarge)
-                Text(session.email, style = MaterialTheme.typography.bodyMedium)
-                AssistChip(onClick = {}, label = { Text(stringResource(if (state.isPremium) R.string.premium else R.string.standard)) })
+            item {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                    PersonalProfileStat(state.followersCount.toString(), R.string.followers, Modifier.weight(1f)) {
+                        onOpenSocial(SocialSection.FOLLOWERS)
+                    }
+                    PersonalProfileStat(state.followingCount.toString(), R.string.following, Modifier.weight(1f)) {
+                        onOpenSocial(SocialSection.FOLLOWING)
+                    }
+                    PersonalProfileStat(state.publicPlaylistsCount.toString(), R.string.playlists, Modifier.weight(1f)) {
+                        onOpenSocial(SocialSection.PLAYLISTS)
+                    }
+                }
+            }
+            if (state.isEditing) {
+                item {
+                    OutlinedTextField(
+                        value = state.displayName,
+                        onValueChange = viewModel::changeDisplayName,
+                        enabled = !state.isSaving,
+                        label = { Text(stringResource(R.string.display_name)) },
+                        supportingText = { Text(stringResource(R.string.profile_changes_hint)) },
+                        singleLine = true,
+                        shape = MaterialTheme.shapes.large,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                item {
+                    OutlinedButton(
+                        onClick = viewModel::cancelEditing,
+                        enabled = !state.isSaving,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(stringResource(R.string.cancel_editing)) }
+                }
+            }
+            if (!state.isPremium) {
+                item {
+                    FilledTonalButton(
+                        onClick = viewModel::upgrade,
+                        enabled = !state.isSaving && !state.hasChanges,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(stringResource(R.string.upgrade_demo)) }
+                }
+            }
+            item {
+                Surface(
+                    onClick = { onOpenSocial(SocialSection.PEOPLE) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Lg),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(NavaDimensions.ProfileDiscoverIconSize),
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                        ) {
+                            Icon(Icons.Outlined.Groups, contentDescription = null, modifier = Modifier.padding(NavaSpacing.Md))
+                        }
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
+                            Text(stringResource(R.string.discover_people), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.discover_people_subtitle), style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Icon(Icons.Outlined.ChevronRight, contentDescription = null)
+                    }
+                }
             }
         }
-        OutlinedTextField(
-            value = state.displayName,
-            onValueChange = viewModel::changeDisplayName,
-            enabled = !state.isLoading && !state.isSaving,
-            label = { Text(stringResource(R.string.display_name)) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Button(onClick = viewModel::saveProfile, enabled = !state.isLoading && !state.isSaving) {
-            if (state.isSaving) CircularProgressIndicator(modifier = Modifier.size(NavaSpacing.Md))
-            else Text(stringResource(R.string.save_profile))
-        }
-        if (!state.isPremium) Button(onClick = viewModel::upgrade, enabled = !state.isSaving) { Text(stringResource(R.string.upgrade_demo)) }
-        Button(onClick = onDiscoverPeople) { Text(stringResource(R.string.discover_people)) }
     }
     state.error?.let { error ->
         AlertDialog(
@@ -1561,50 +3093,446 @@ private fun ProfileShell(
 }
 
 @Composable
-private fun SocialShell(modifier: Modifier, viewModel: SocialViewModel = hiltViewModel()) {
+private fun PersonalProfileStat(
+    value: String,
+    @StringRes label: Int,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = NavaSpacing.Md, horizontal = NavaSpacing.Sm),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs),
+        ) {
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(stringResource(label), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun SocialShell(
+    modifier: Modifier,
+    onBack: () -> Unit,
+    initialSection: SocialSection = SocialSection.PEOPLE,
+    viewModel: SocialViewModel = hiltViewModel(),
+    chatViewModel: ChatViewModel = hiltViewModel(),
+    playbackViewModel: PlaybackViewModel = hiltViewModel(),
+) {
     val state by viewModel.state.collectAsState()
-    val chatViewModel: ChatViewModel = hiltViewModel()
     var messagesOpen by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(initialSection) { viewModel.select(initialSection) }
+    BackHandler {
+        when {
+            messagesOpen -> messagesOpen = false
+            state.selectedPerson != null -> viewModel.closeProfile()
+            else -> onBack()
+        }
+    }
     if (messagesOpen) {
-        ChatShell(modifier = modifier, onBack = { messagesOpen = false }, viewModel = chatViewModel)
+        ChatShell(
+            modifier = modifier,
+            onBack = { messagesOpen = false },
+            viewModel = chatViewModel,
+            playbackViewModel = playbackViewModel,
+        )
         return
     }
-    Column(modifier = modifier.fillMaxSize().padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
-        Text(stringResource(R.string.people), style = MaterialTheme.typography.headlineSmall)
-        Button(onClick = { messagesOpen = true }) { Text(stringResource(R.string.messages)) }
-        Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-            AssistChip(onClick = { viewModel.select(SocialSection.PEOPLE) }, label = { Text(stringResource(R.string.people)) })
-            AssistChip(onClick = { viewModel.select(SocialSection.FOLLOWING) }, label = { Text(stringResource(R.string.following)) })
-            AssistChip(onClick = { viewModel.select(SocialSection.FOLLOWERS) }, label = { Text(stringResource(R.string.followers)) })
-            AssistChip(onClick = { viewModel.select(SocialSection.PLAYLISTS) }, label = { Text(stringResource(R.string.public_playlists)) })
-        }
-        if (state.section == SocialSection.PEOPLE) OutlinedTextField(
-            value = state.query,
-            onValueChange = viewModel::search,
-            label = { Text(stringResource(R.string.search_people)) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+    state.selectedPerson?.let { person ->
+        PublicProfileScreen(
+            modifier = modifier,
+            person = state.profileDetails?.person ?: person,
+            details = state.profileDetails,
+            loading = state.profileLoading,
+            onBack = viewModel::closeProfile,
+            onToggleFollow = { viewModel.toggleFollow(state.profileDetails?.person ?: person) },
+            onMessage = {
+                chatViewModel.open(state.profileDetails?.person ?: person)
+                messagesOpen = true
+            },
         )
-        when {
-            state.loading -> CircularProgressIndicator()
-            state.error -> Button(onClick = { viewModel.select(state.section) }) { Text(stringResource(R.string.retry)) }
-            state.section == SocialSection.PLAYLISTS && state.playlists.isEmpty() -> Text(stringResource(R.string.playlists_empty))
-            state.people.isEmpty() && state.section != SocialSection.PLAYLISTS -> Text(stringResource(R.string.people_empty))
-            state.section == SocialSection.PLAYLISTS -> LazyColumn(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-                items(state.playlists, key = { it.id }) { playlist -> Card { Column(Modifier.padding(NavaSpacing.Md)) { Text(playlist.title, style = MaterialTheme.typography.titleMedium); Text(playlist.ownerName); playlist.description?.let { Text(it) }; Text(stringResource(R.string.track_count, playlist.trackCount)) } } }
+        return
+    }
+    Column(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.padding(horizontal = NavaSpacing.Lg, vertical = NavaSpacing.Md),
+            verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+        ) {
+            Text(stringResource(R.string.discover_title), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(
+                stringResource(R.string.discover_subtitle),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            FilledTonalButton(
+                onClick = { messagesOpen = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Outlined.Chat, contentDescription = null)
+                Spacer(Modifier.size(NavaSpacing.Sm))
+                Text(stringResource(R.string.messages))
             }
-            else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-                items(state.people, key = SocialPerson::id) { person ->
-                    Card {
-                        Row(Modifier.fillMaxWidth().padding(NavaSpacing.Md), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) { Text(person.displayName, style = MaterialTheme.typography.titleMedium) }
-                            Button(onClick = { viewModel.toggleFollow(person) }) {
-                                Text(stringResource(if (person.isFollowing) R.string.unfollow else R.string.follow))
-                            }
-                            IconButton(onClick = { chatViewModel.open(person); messagesOpen = true }) {
-                                Icon(Icons.Outlined.Chat, contentDescription = stringResource(R.string.open_chat))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                item { SocialFilterChip(state.section == SocialSection.PEOPLE, R.string.people) { viewModel.select(SocialSection.PEOPLE) } }
+                item { SocialFilterChip(state.section == SocialSection.FOLLOWING, R.string.following) { viewModel.select(SocialSection.FOLLOWING) } }
+                item { SocialFilterChip(state.section == SocialSection.FOLLOWERS, R.string.followers) { viewModel.select(SocialSection.FOLLOWERS) } }
+                item { SocialFilterChip(state.section == SocialSection.PLAYLISTS, R.string.top_public_playlists) { viewModel.select(SocialSection.PLAYLISTS) } }
+            }
+            if (state.section == SocialSection.PEOPLE) {
+                OutlinedTextField(
+                    value = state.query,
+                    onValueChange = viewModel::search,
+                    placeholder = { Text(stringResource(R.string.search_people)) },
+                    leadingIcon = { Icon(Icons.Outlined.ManageSearch, contentDescription = null) },
+                    trailingIcon = {
+                        if (state.query.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.search("") }) {
+                                Icon(Icons.Outlined.Clear, contentDescription = stringResource(R.string.clear_search))
                             }
                         }
+                    },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.large,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+        when {
+            state.loading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            state.error -> SearchMessage(
+                title = stringResource(R.string.social_error),
+                body = stringResource(R.string.social_error_hint),
+                action = { Button(onClick = { viewModel.select(state.section) }) { Text(stringResource(R.string.retry)) } },
+            )
+            state.section == SocialSection.PLAYLISTS && state.playlists.isEmpty() -> SearchMessage(
+                title = stringResource(R.string.playlists_empty),
+                body = stringResource(R.string.top_public_playlists_empty_hint),
+            )
+            state.people.isEmpty() && state.section != SocialSection.PLAYLISTS -> SearchMessage(
+                title = stringResource(R.string.people_empty),
+                body = stringResource(R.string.people_empty_hint),
+            )
+            state.section == SocialSection.PLAYLISTS -> LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NavaSpacing.Lg, vertical = NavaSpacing.Sm),
+                verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+            ) {
+                items(state.playlists, key = PublicPlaylist::id) { playlist -> PublicPlaylistCard(playlist) }
+            }
+            else -> LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NavaSpacing.Lg, vertical = NavaSpacing.Sm),
+                verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+            ) {
+                items(state.people, key = SocialPerson::id) { person ->
+                    SocialPersonCard(
+                        person = person,
+                        onOpen = { viewModel.openProfile(person) },
+                        onToggleFollow = { viewModel.toggleFollow(person) },
+                        onMessage = {
+                            chatViewModel.open(person)
+                            messagesOpen = true
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SocialFilterChip(selected: Boolean, @StringRes label: Int, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = {
+            Text(
+                stringResource(label),
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            )
+        },
+    )
+}
+
+@Composable
+private fun SocialPersonCard(
+    person: SocialPerson,
+    onOpen: () -> Unit,
+    onToggleFollow: () -> Unit,
+    onMessage: () -> Unit,
+) {
+    Card(
+        onClick = onOpen,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            UserAvatar(
+                model = person.avatarUrl,
+                contentDescription = stringResource(R.string.person_avatar, person.displayName),
+                modifier = Modifier.size(NavaDimensions.SocialAvatarSize),
+            )
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
+                Text(person.displayName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    stringResource(R.string.view_profile),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(onClick = onMessage) {
+                Icon(Icons.Outlined.Chat, contentDescription = stringResource(R.string.open_chat))
+            }
+            if (person.isFollowing) {
+                OutlinedButton(onClick = onToggleFollow) { Text(stringResource(R.string.following)) }
+            } else {
+                FilledTonalButton(onClick = onToggleFollow) { Text(stringResource(R.string.follow)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PublicProfileScreen(
+    modifier: Modifier,
+    person: SocialPerson,
+    details: SocialProfileDetails?,
+    loading: Boolean,
+    onBack: () -> Unit,
+    onToggleFollow: () -> Unit,
+    onMessage: () -> Unit,
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(NavaSpacing.Lg),
+        verticalArrangement = Arrangement.spacedBy(NavaSpacing.Lg),
+    ) {
+        item {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Outlined.ArrowBack, contentDescription = stringResource(R.string.back_to_people))
+            }
+        }
+        item {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+            ) {
+                UserAvatar(
+                    model = person.avatarUrl,
+                    contentDescription = stringResource(R.string.person_avatar, person.displayName),
+                    modifier = Modifier
+                        .size(NavaDimensions.PublicProfileAvatarSize)
+                        .border(
+                            NavaDimensions.ProfileAvatarBorderWidth,
+                            MaterialTheme.colorScheme.primary,
+                            CircleShape,
+                        ),
+                )
+                Text(person.displayName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                Text(stringResource(R.string.public_profile), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (person.isFollowing) {
+                    OutlinedButton(onClick = onToggleFollow) { Text(stringResource(R.string.unfollow)) }
+                } else {
+                    Button(onClick = onToggleFollow) { Text(stringResource(R.string.follow)) }
+                }
+                FilledTonalButton(onClick = onMessage) {
+                    Icon(Icons.Outlined.Chat, contentDescription = null)
+                    Spacer(Modifier.size(NavaSpacing.Sm))
+                    Text(stringResource(R.string.messages))
+                }
+            }
+        }
+        if (loading) {
+            item { Box(modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Xl), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+        } else {
+            details?.let { profile ->
+                item {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                        ProfileStat(profile.followersCount.toString(), R.string.followers, Modifier.weight(1f))
+                        ProfileStat(profile.followingCount.toString(), R.string.following, Modifier.weight(1f))
+                        ProfileStat(profile.playlists.size.toString(), R.string.playlists, Modifier.weight(1f))
+                    }
+                }
+                item {
+                    Text(stringResource(R.string.public_playlists), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                }
+                if (profile.playlists.isEmpty()) {
+                    item { Text(stringResource(R.string.public_playlists_empty_hint), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                } else {
+                    items(profile.playlists, key = PublicPlaylist::id) { playlist -> PublicPlaylistCard(playlist) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileStat(value: String, @StringRes label: Int, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Column(
+            modifier = Modifier.padding(NavaSpacing.Md),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(stringResource(label), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun PublicPlaylistCard(playlist: PublicPlaylist) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Column(modifier = Modifier.padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
+            Text(playlist.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(playlist.ownerName, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+            playlist.description?.takeIf(String::isNotBlank)?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(stringResource(R.string.track_count, playlist.trackCount), style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+@Composable
+private fun UserAvatar(model: Any?, contentDescription: String, modifier: Modifier = Modifier) {
+    AsyncImage(
+        model = model,
+        contentDescription = contentDescription,
+        contentScale = ContentScale.Crop,
+        fallback = painterResource(R.drawable.ic_launcher_foreground),
+        error = painterResource(R.drawable.ic_launcher_foreground),
+        modifier = modifier.clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+    )
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun SettingsShell(
+    session: AuthSession,
+    preferences: UserPreferences,
+    onEvent: (NavaEvent) -> Unit,
+    modifier: Modifier,
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(NavaSpacing.Lg),
+        verticalArrangement = Arrangement.spacedBy(NavaSpacing.Lg),
+    ) {
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
+                Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    stringResource(R.string.settings_subtitle),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        item {
+            SettingButtons(
+                icon = Icons.Outlined.DarkMode,
+                title = R.string.theme,
+                options = listOf(
+                    R.string.theme_system to ThemeMode.SYSTEM,
+                    R.string.theme_light to ThemeMode.LIGHT,
+                    R.string.theme_dark to ThemeMode.DARK,
+                ),
+                selected = preferences.themeMode,
+                onSelected = { onEvent(NavaEvent.SetTheme(it)) },
+            )
+        }
+        item {
+            SettingButtons(
+                icon = Icons.Outlined.Language,
+                title = R.string.language,
+                options = listOf(
+                    R.string.language_english to AppLanguage.ENGLISH,
+                    R.string.language_persian to AppLanguage.PERSIAN,
+                ),
+                selected = preferences.language,
+                onSelected = { onEvent(NavaEvent.SetLanguage(it)) },
+            )
+        }
+        item {
+            SettingButtons(
+                icon = Icons.Outlined.FormatSize,
+                title = R.string.font_size,
+                options = listOf(
+                    R.string.font_size_small to FontScale.SMALL,
+                    R.string.font_size_standard to FontScale.STANDARD,
+                    R.string.font_size_large to FontScale.LARGE,
+                ),
+                selected = preferences.fontScale,
+                onSelected = { onEvent(NavaEvent.SetFontScale(it)) },
+            )
+        }
+        item { SignOutCard(email = session.email, onSignOut = { onEvent(NavaEvent.SignOut) }) }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun <T> SettingButtons(
+    icon: ImageVector,
+    @StringRes title: Int,
+    options: List<Pair<Int, T>>,
+    selected: T,
+    onSelected: (T) -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Column(modifier = Modifier.padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                Surface(
+                    modifier = Modifier.size(NavaDimensions.SettingsIconSize),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ) {
+                    Icon(icon, contentDescription = null, modifier = Modifier.padding(NavaSpacing.Sm))
+                }
+                Text(stringResource(title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm), modifier = Modifier.fillMaxWidth()) {
+                options.forEach { (label, value) ->
+                    val isSelected = selected == value
+                    Surface(
+                        onClick = { onSelected(value) },
+                        modifier = Modifier.weight(1f),
+                        shape = MaterialTheme.shapes.medium,
+                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+                        contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                    ) {
+                        Text(
+                            stringResource(label),
+                            modifier = Modifier.padding(horizontal = NavaSpacing.Sm, vertical = NavaSpacing.Md),
+                            textAlign = TextAlign.Center,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            maxLines = 2,
+                        )
                     }
                 }
             }
@@ -1613,67 +3541,55 @@ private fun SocialShell(modifier: Modifier, viewModel: SocialViewModel = hiltVie
 }
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
-private fun SettingsShell(
-    preferences: UserPreferences,
-    onEvent: (NavaEvent) -> Unit,
-    modifier: Modifier,
-) {
-    Column(modifier = modifier.fillMaxSize().padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Lg)) {
-        Text(stringResource(R.string.settings), style = MaterialTheme.typography.headlineSmall)
-        SettingButtons(
-            title = R.string.theme,
-            options = listOf(
-                R.string.theme_system to ThemeMode.SYSTEM,
-                R.string.theme_light to ThemeMode.LIGHT,
-                R.string.theme_dark to ThemeMode.DARK,
-            ),
-            selected = preferences.themeMode,
-            onSelected = { onEvent(NavaEvent.SetTheme(it)) },
-        )
-        SettingButtons(
-            title = R.string.language,
-            options = listOf(
-                R.string.language_english to AppLanguage.ENGLISH,
-                R.string.language_persian to AppLanguage.PERSIAN,
-            ),
-            selected = preferences.language,
-            onSelected = { onEvent(NavaEvent.SetLanguage(it)) },
-        )
-        SettingButtons(
-            title = R.string.font_size,
-            options = listOf(
-                R.string.font_size_small to FontScale.SMALL,
-                R.string.font_size_standard to FontScale.STANDARD,
-                R.string.font_size_large to FontScale.LARGE,
-            ),
-            selected = preferences.fontScale,
-            onSelected = { onEvent(NavaEvent.SetFontScale(it)) },
-        )
-        AssistChip(onClick = { onEvent(NavaEvent.SignOut) }, label = { Text(stringResource(R.string.sign_out)) })
-    }
-}
-
-@Composable
-@OptIn(ExperimentalMaterial3Api::class)
-private fun <T> SettingButtons(
-    @StringRes title: Int,
-    options: List<Pair<Int, T>>,
-    selected: T,
-    onSelected: (T) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-        Text(stringResource(title), style = MaterialTheme.typography.titleMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm), modifier = Modifier.fillMaxWidth()) {
-            options.forEach { (label, value) ->
-                Surface(
-                    onClick = { onSelected(value) },
-                    shape = MaterialTheme.shapes.small,
-                    color = if (selected == value) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                ) {
-                    Text(stringResource(label), modifier = Modifier.padding(NavaSpacing.Md))
-                }
+private fun SignOutCard(email: String, onSignOut: () -> Unit) {
+    var confirmationOpen by rememberSaveable { mutableStateOf(false) }
+    Surface(
+        onClick = { confirmationOpen = true },
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Lg),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            Surface(
+                modifier = Modifier.size(NavaDimensions.SettingsAccountIconSize),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.error,
+                contentColor = MaterialTheme.colorScheme.onError,
+            ) {
+                Icon(Icons.Outlined.Logout, contentDescription = null, modifier = Modifier.padding(NavaSpacing.Md))
             }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
+                Text(stringResource(R.string.sign_out), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(email, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(stringResource(R.string.sign_out_subtitle), style = MaterialTheme.typography.bodySmall)
+            }
+            Icon(Icons.Outlined.ChevronRight, contentDescription = null)
         }
+    }
+    if (confirmationOpen) {
+        AlertDialog(
+            onDismissRequest = { confirmationOpen = false },
+            icon = { Icon(Icons.Outlined.Logout, contentDescription = null) },
+            title = { Text(stringResource(R.string.sign_out_confirm_title), fontWeight = FontWeight.Bold) },
+            text = { Text(stringResource(R.string.sign_out_confirm_message)) },
+            dismissButton = {
+                OutlinedButton(onClick = { confirmationOpen = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    confirmationOpen = false
+                    onSignOut()
+                }) {
+                    Text(stringResource(R.string.sign_out))
+                }
+            },
+        )
     }
 }

@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -123,11 +124,13 @@ private fun NavaRoot(viewModel: NavaViewModel = hiltViewModel()) {
                     isAuthenticating = current.isAuthenticating,
                     effects = viewModel.effects,
                 )
-                is NavaUiState.SignedIn -> NavaAppShell(
-                    session = current.session,
-                    preferences = current.preferences,
-                    onEvent = viewModel::onEvent,
-                )
+                is NavaUiState.SignedIn -> key(current.session.userId) {
+                    NavaAppShell(
+                        session = current.session,
+                        preferences = current.preferences,
+                        onEvent = viewModel::onEvent,
+                    )
+                }
             }
         }
     }

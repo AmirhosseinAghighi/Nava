@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.nava.data.downloads.OfflineDownloadRepository
 import com.example.nava.data.downloads.OfflineTrackEntity
 import com.example.nava.data.downloads.DownloadTransfer
+import com.example.nava.data.downloads.PremiumDownloadRequired
 import com.example.nava.domain.catalog.HomeTrack
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -25,6 +26,8 @@ data class DownloadsUiState(
     val downloadingTrackIds: Set<String> get() = activeDownloads.mapTo(mutableSetOf(), DownloadTransfer::trackId)
 }
 
+enum class DownloadUiError { PremiumRequired, Unavailable }
+
 @HiltViewModel class DownloadViewModel @Inject constructor(private val repository: OfflineDownloadRepository) : ViewModel() {
     private val preparingDownloads = MutableStateFlow<List<DownloadTransfer>>(emptyList())
     val state: StateFlow<DownloadsUiState> = combine(
@@ -35,13 +38,19 @@ data class DownloadsUiState(
         val activeByTrack = (preparing + active).associateBy(DownloadTransfer::trackId)
         DownloadsUiState(downloads = downloads, activeDownloads = activeByTrack.values.filter { it.trackId !in downloads.map(OfflineTrackEntity::trackId) })
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DownloadsUiState())
-    private val _downloadError = MutableStateFlow<String?>(null)
+    private val _downloadError = MutableStateFlow<DownloadUiError?>(null)
     val downloadError = _downloadError.asStateFlow()
     fun request(track: HomeTrack) = viewModelScope.launch {
         preparingDownloads.update { current ->
             (current.filterNot { it.trackId == track.id } + DownloadTransfer(track.id, track.title, track.artistName, track.coverImageUrl, 0))
         }
-        repository.requestDownload(track).onFailure { _downloadError.value = it.message ?: "Download could not start." }
+        repository.requestDownload(track).onFailure { error ->
+            _downloadError.value = if (error is PremiumDownloadRequired) {
+                DownloadUiError.PremiumRequired
+            } else {
+                DownloadUiError.Unavailable
+            }
+        }
         preparingDownloads.update { current -> current.filterNot { it.trackId == track.id } }
     }
     fun remove(track: OfflineTrackEntity) = viewModelScope.launch { repository.remove(track) }

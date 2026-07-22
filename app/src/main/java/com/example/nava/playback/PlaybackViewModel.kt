@@ -5,11 +5,13 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.Uri
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.nava.domain.catalog.HomeTrack
 import com.example.nava.data.downloads.OfflineDownloadRepository
+import com.example.nava.data.downloads.OfflineTrackEntity
 import java.io.File
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.jan.supabase.SupabaseClient
@@ -31,6 +33,8 @@ data class NowPlaying(
     val durationMs: Long = 0L,
 )
 
+enum class RepeatMode { Off, All, One }
+
 @HiltViewModel
 class PlaybackViewModel @Inject constructor(
     application: Application,
@@ -50,7 +54,11 @@ class PlaybackViewModel @Inject constructor(
     val sleepTimerMinutes: StateFlow<Long?> = _sleepTimerMinutes.asStateFlow()
     private val _fftBands = MutableStateFlow(FloatArray(FFT_BAND_COUNT))
     val fftBands: StateFlow<FloatArray> = _fftBands.asStateFlow()
-    private var shuffleSource: List<HomeTrack> = emptyList()
+    private val _shuffleEnabled = MutableStateFlow(false)
+    val shuffleEnabled: StateFlow<Boolean> = _shuffleEnabled.asStateFlow()
+    private val _repeatMode = MutableStateFlow(RepeatMode.Off)
+    val repeatMode: StateFlow<RepeatMode> = _repeatMode.asStateFlow()
+    private var playbackSource: List<HomeTrack> = emptyList()
     private val playbackHistory = mutableListOf<HomeTrack>()
     private var sleepTimerResetJob: Job? = null
     private var isAdvancing = false
@@ -110,21 +118,51 @@ class PlaybackViewModel @Inject constructor(
         playTrack(track)
     }
 
+    fun playOffline(download: OfflineTrackEntity) = viewModelScope.launch {
+        rememberCurrentTrack()
+        val track = HomeTrack(
+            id = download.trackId,
+            title = download.title,
+            artistName = download.artistName,
+            coverImageUrl = download.coverImageUrl,
+            audioUrl = download.audioPath,
+            languageCode = "",
+        )
+        playTrack(track, download.audioPath)
+    }
+
     fun addToQueue(track: HomeTrack) {
         _userQueue.value = _userQueue.value + track
     }
 
     fun setShuffleSource(tracks: List<HomeTrack>) {
-        shuffleSource = tracks.distinctBy(HomeTrack::id)
+        playbackSource = tracks.distinctBy(HomeTrack::id)
     }
 
-    private suspend fun playTrack(track: HomeTrack): Boolean {
+    fun toggleShuffle() {
+        _shuffleEnabled.value = !_shuffleEnabled.value
+    }
+
+    fun cycleRepeatMode() {
+        _repeatMode.value = when (_repeatMode.value) {
+            RepeatMode.Off -> RepeatMode.All
+            RepeatMode.All -> RepeatMode.One
+            RepeatMode.One -> RepeatMode.Off
+        }
+    }
+
+    private suspend fun playTrack(track: HomeTrack, localAudioPath: String? = null): Boolean {
         runCatching {
-            offlineDownloads.find(track.id)
+            localAudioPath
+                ?.let(::File)
+                ?.takeIf(File::exists)
+                ?.let(Uri::fromFile)
+                ?.toString()
+                ?: offlineDownloads.find(track.id)
                 ?.audioPath
                 ?.let(::File)
                 ?.takeIf(File::exists)
-                ?.toURI()
+                ?.let(Uri::fromFile)
                 ?.toString()
                 ?: resolver.resolve(track.audioUrl)
         }
@@ -218,17 +256,18 @@ class PlaybackViewModel @Inject constructor(
     }
 
     private fun advanceAfterCompletion(current: NowPlaying) {
-        advanceToNext(current)
+        if (_repeatMode.value == RepeatMode.One) restartCurrent(current)
+        else advanceToNext(current)
     }
 
     private fun advanceToNext(current: NowPlaying) {
         if (isAdvancing) return
         val queuedTrack = _userQueue.value.firstOrNull()
-        val nextTrack = queuedTrack ?: shuffleSource
-            .filterNot { it.id == current.track.id }
-            .shuffled()
-            .firstOrNull()
-            ?: return
+        val nextTrack = queuedTrack ?: sourceTrackAfter(current.track)
+        if (nextTrack == null) {
+            if (_repeatMode.value == RepeatMode.All) restartCurrent(current)
+            return
+        }
         rememberCurrentTrack()
         isAdvancing = true
         viewModelScope.launch {
@@ -242,6 +281,31 @@ class PlaybackViewModel @Inject constructor(
         }
     }
 
+    private fun sourceTrackAfter(current: HomeTrack): HomeTrack? {
+        if (playbackSource.isEmpty()) return null
+        if (_shuffleEnabled.value) {
+            return playbackSource.filterNot { it.id == current.id }.randomOrNull()
+        }
+        val currentIndex = playbackSource.indexOfFirst { it.id == current.id }
+        if (currentIndex < 0) return playbackSource.firstOrNull { it.id != current.id }
+        return playbackSource.getOrNull(currentIndex + 1)
+            ?: playbackSource.firstOrNull().takeIf { _repeatMode.value == RepeatMode.All }
+    }
+
+    private fun restartCurrent(current: NowPlaying) {
+        if (isAdvancing) return
+        isAdvancing = true
+        seekTo(0L)
+        send(NavaPlaybackService.ACTION_RESUME)
+        _nowPlaying.value = current.copy(playing = true, positionMs = 0L)
+        lastRecordedProgressMs = 0L
+        recordEvent(current.track.id, "started", 0L)
+        viewModelScope.launch {
+            delay(REPEAT_GUARD_INTERVAL_MS)
+            isAdvancing = false
+        }
+    }
+
     private fun send(action: String, extra: Pair<String, Any>) {
         Intent(getApplication(), NavaPlaybackService::class.java).setAction(action).also { intent ->
             when (val value = extra.second) { is Long -> intent.putExtra(extra.first, value); is Float -> intent.putExtra(extra.first, value) }
@@ -249,9 +313,16 @@ class PlaybackViewModel @Inject constructor(
         }
     }
 
+    private fun send(action: String) {
+        getApplication<Application>().startService(
+            Intent(getApplication(), NavaPlaybackService::class.java).setAction(action),
+        )
+    }
+
     private companion object {
         const val PROGRESS_REPORT_INTERVAL_MS = 30_000L
         const val RESTART_POSITION_MS = 5_000L
+        const val REPEAT_GUARD_INTERVAL_MS = 300L
         const val FFT_BAND_COUNT = 28
         val SPEED_OPTIONS = listOf(0.75f, 1f, 1.25f, 1.5f, 2f)
         val SLEEP_TIMER_OPTIONS = listOf<Long?>(null, 15L, 30L, 45L, 60L)
