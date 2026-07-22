@@ -78,11 +78,19 @@
     <string name="profile_loading">Loading profile…</string>
     <string name="display_name">Display name</string>
     <string name="save_profile">Save profile</string>
+    <string name="edit_profile_photo">Choose a new profile photo</string>
+    <string name="confirm_profile_changes">Confirm profile changes</string>
+    <string name="profile_changes_hint">Edit your name, then tap the check beside your photo to apply changes.</string>
+    <string name="premium_member">Premium member</string>
+    <string name="standard_member">Standard member</string>
     <string name="font_size">Font size</string>
     <string name="font_size_small">Small</string>
     <string name="font_size_standard">Standard</string>
     <string name="font_size_large">Large</string>
     <string name="discover_people">Discover people</string>
+    <string name="discover_people_subtitle">Find listeners, follow friends, and explore their public playlists.</string>
+    <string name="discover_title">Find your music community</string>
+    <string name="discover_subtitle">Connect with other Nava listeners and discover what they share.</string>
     <string name="people">People</string>
     <string name="search_people">Search people</string>
     <string name="people_empty">No people found.</string>
@@ -92,6 +100,15 @@
     <string name="followers">Followers</string>
     <string name="public_playlists">Public playlists</string>
     <string name="playlists_empty">No public playlists yet.</string>
+    <string name="public_playlists_empty_hint">Public playlists shared by this listener will appear here.</string>
+    <string name="people_empty_hint">Try another name or explore a different connection tab.</string>
+    <string name="social_error">People could not be loaded</string>
+    <string name="social_error_hint">Check your connection and try again.</string>
+    <string name="person_avatar">Profile photo for %1$s</string>
+    <string name="view_profile">View profile and shared playlists</string>
+    <string name="public_profile">Nava listener</string>
+    <string name="back_to_people">Back to people</string>
+    <string name="back">Back</string>
     <string name="track_count">%1$d tracks</string>
     <string name="open_settings">Open settings</string>
     <string name="navigation">Main navigation</string>
@@ -101,6 +118,12 @@
     <string name="resume_playback">Resume playback</string>
     <string name="previous_track">Previous track</string>
     <string name="next_track">Next track</string>
+    <string name="liked">Liked</string>
+    <string name="shuffle">Shuffle off</string>
+    <string name="shuffle_enabled">Shuffle on</string>
+    <string name="repeat_off">Repeat off</string>
+    <string name="repeat_all">Repeat all</string>
+    <string name="repeat_one">Repeat one</string>
     <string name="playback_position">%1$d:%2$02d / %3$d:%4$02d</string>
     <string name="now_playing_artwork">Now playing artwork</string>
     <string name="now_playing">Now playing</string>
@@ -142,6 +165,5 @@
     <string name="message_sent">Sent</string>
     <string name="message_delivered">Delivered</string>
     <string name="message_read">Read</string>
-    <string name="back">Back</string>
     <string name="typing">%1$s is typing…</string>
 </resources>

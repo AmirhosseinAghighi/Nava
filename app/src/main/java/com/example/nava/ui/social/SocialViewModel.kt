@@ -119,7 +119,11 @@ class SocialViewModel @Inject constructor(private val supabase: SupabaseClient) 
             .onSuccess { following ->
                 val updatedPerson = person.copy(isFollowing = following)
                 _state.value = _state.value.copy(
-                    people = _state.value.people.map { if (it.id == person.id) updatedPerson else it },
+                    people = if (_state.value.section == SocialSection.FOLLOWING && !following) {
+                        _state.value.people.filterNot { it.id == person.id }
+                    } else {
+                        _state.value.people.map { if (it.id == person.id) updatedPerson else it }
+                    },
                     selectedPerson = _state.value.selectedPerson?.let { if (it.id == person.id) updatedPerson else it },
                     profileDetails = _state.value.profileDetails?.let { details ->
                         if (details.person.id == person.id) details.copy(person = updatedPerson) else details
@@ -143,10 +147,12 @@ class SocialViewModel @Inject constructor(private val supabase: SupabaseClient) 
         }).decodeList<PlaylistDto>().map { PublicPlaylist(it.id, it.title, it.description, it.ownerName, it.trackCount) }
 
     private suspend fun signedAvatarUrl(path: String?): String? = path?.let {
-        supabase.storage.from(AVATAR_BUCKET).createSignedUrl(
-            it.removePrefix("storage://$AVATAR_BUCKET/"),
-            AVATAR_URL_DURATION,
-        )
+        runCatching {
+            supabase.storage.from(AVATAR_BUCKET).createSignedUrl(
+                it.removePrefix("storage://$AVATAR_BUCKET/"),
+                AVATAR_URL_DURATION,
+            )
+        }.getOrNull()
     }
 
     private data class SocialPayload(val people: List<SocialPerson> = emptyList(), val playlists: List<PublicPlaylist> = emptyList())

@@ -78,11 +78,19 @@
     <string name="profile_loading">در حال بارگیری پروفایل…</string>
     <string name="display_name">نام نمایشی</string>
     <string name="save_profile">ذخیره پروفایل</string>
+    <string name="edit_profile_photo">انتخاب عکس پروفایل جدید</string>
+    <string name="confirm_profile_changes">تأیید تغییرات پروفایل</string>
+    <string name="profile_changes_hint">نام را ویرایش کنید و برای اعمال تغییرات، تیک کنار عکس را بزنید.</string>
+    <string name="premium_member">عضو پریمیوم</string>
+    <string name="standard_member">عضو استاندارد</string>
     <string name="font_size">اندازه فونت</string>
     <string name="font_size_small">کوچک</string>
     <string name="font_size_standard">استاندارد</string>
     <string name="font_size_large">بزرگ</string>
     <string name="discover_people">کشف کاربران</string>
+    <string name="discover_people_subtitle">شنونده‌ها را پیدا کنید، دوستان را دنبال کنید و پلی‌لیست‌های عمومی‌شان را ببینید.</string>
+    <string name="discover_title">جامعه موسیقی خود را پیدا کنید</string>
+    <string name="discover_subtitle">با شنونده‌های نوا ارتباط بگیرید و موسیقی‌های اشتراکی آن‌ها را کشف کنید.</string>
     <string name="people">کاربران</string>
     <string name="search_people">جستجوی کاربران</string>
     <string name="people_empty">کاربری پیدا نشد.</string>
@@ -92,6 +100,15 @@
     <string name="followers">دنبال‌کنندگان</string>
     <string name="public_playlists">پلی‌لیست‌های عمومی</string>
     <string name="playlists_empty">هنوز پلی‌لیست عمومی وجود ندارد.</string>
+    <string name="public_playlists_empty_hint">پلی‌لیست‌های عمومی این کاربر در اینجا نمایش داده می‌شوند.</string>
+    <string name="people_empty_hint">نام دیگری را جستجو یا تب ارتباطی متفاوتی را انتخاب کنید.</string>
+    <string name="social_error">کاربران بارگیری نشدند</string>
+    <string name="social_error_hint">اتصال اینترنت را بررسی و دوباره تلاش کنید.</string>
+    <string name="person_avatar">عکس پروفایل %1$s</string>
+    <string name="view_profile">مشاهده پروفایل و پلی‌لیست‌های عمومی</string>
+    <string name="public_profile">شنونده نوا</string>
+    <string name="back_to_people">بازگشت به کاربران</string>
+    <string name="back">بازگشت</string>
     <string name="track_count">%1$d آهنگ</string>
     <string name="open_settings">باز کردن تنظیمات</string>
     <string name="navigation">ناوبری اصلی</string>
@@ -101,6 +118,12 @@
     <string name="resume_playback">ادامه پخش</string>
     <string name="previous_track">آهنگ قبلی</string>
     <string name="next_track">آهنگ بعدی</string>
+    <string name="liked">پسندیده‌شده</string>
+    <string name="shuffle">پخش تصادفی خاموش</string>
+    <string name="shuffle_enabled">پخش تصادفی روشن</string>
+    <string name="repeat_off">تکرار خاموش</string>
+    <string name="repeat_all">تکرار همه</string>
+    <string name="repeat_one">تکرار یک آهنگ</string>
     <string name="playback_position">%1$d:%2$02d / %3$d:%4$02d</string>
     <string name="now_playing_artwork">تصویر در حال پخش</string>
     <string name="now_playing">در حال پخش</string>
@@ -142,6 +165,5 @@
     <string name="message_sent">ارسال شد</string>
     <string name="message_delivered">تحویل شد</string>
     <string name="message_read">خوانده شد</string>
-    <string name="back">بازگشت</string>
     <string name="typing">%1$s در حال نوشتن است…</string>
 </resources>

@@ -46,6 +46,7 @@ import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.DownloadDone
 import androidx.compose.material.icons.outlined.Clear
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Favorite
@@ -58,7 +59,10 @@ import androidx.compose.material.icons.outlined.ManageSearch
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.QueueMusic
+import androidx.compose.material.icons.outlined.Repeat
+import androidx.compose.material.icons.outlined.RepeatOne
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.SkipNext
@@ -167,6 +171,7 @@ import com.example.nava.ui.chat.ChatShell
 import com.example.nava.ui.chat.ChatViewModel
 import com.example.nava.playback.NowPlaying
 import com.example.nava.playback.PlaybackViewModel
+import com.example.nava.playback.RepeatMode
 import com.example.nava.ui.theme.NavaMotion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
@@ -227,10 +232,13 @@ fun NavaAppShell(
     val nowPlaying by playbackViewModel.nowPlaying.collectAsState()
     val playbackSpeed by playbackViewModel.playbackSpeed.collectAsState()
     val sleepTimerMinutes by playbackViewModel.sleepTimerMinutes.collectAsState()
+    val shuffleEnabled by playbackViewModel.shuffleEnabled.collectAsState()
+    val repeatMode by playbackViewModel.repeatMode.collectAsState()
     val fftBands by playbackViewModel.fftBands.collectAsState()
     val playbackError by playbackViewModel.playbackError.collectAsState()
     val downloadState by downloadViewModel.state.collectAsState()
     val downloadError by downloadViewModel.downloadError.collectAsState()
+    val likesState by likesViewModel.state.collectAsState()
     Scaffold(
         topBar = {
             TopAppBar(
@@ -319,12 +327,21 @@ fun NavaAppShell(
                 nowPlaying = now,
                 playbackSpeed = playbackSpeed,
                 sleepTimerMinutes = sleepTimerMinutes,
+                shuffleEnabled = shuffleEnabled,
+                repeatMode = repeatMode,
+                isLiked = now.track.id in likesState.likedIds,
+                isDownloaded = now.track.id in downloadState.downloadedTrackIds,
+                isDownloading = now.track.id in downloadState.downloadingTrackIds,
                 fftBands = fftBands,
                 onDismiss = { playerExpanded = false },
                 onToggle = { if (now.playing) playbackViewModel.pause() else playbackViewModel.resume() },
                 onSeek = playbackViewModel::seekTo,
                 onCycleSpeed = playbackViewModel::cycleSpeed,
                 onCycleSleepTimer = playbackViewModel::cycleSleepTimer,
+                onToggleShuffle = playbackViewModel::toggleShuffle,
+                onCycleRepeat = playbackViewModel::cycleRepeatMode,
+                onToggleLike = { likesViewModel.toggle(now.track) },
+                onDownload = { downloadViewModel.request(now.track) },
                 onPrevious = playbackViewModel::skipToPrevious,
                 onNext = playbackViewModel::skipToNext,
             )
@@ -344,8 +361,7 @@ fun NavaAppShell(
     queueCandidate?.let { track ->
         val isDownloaded = track.id in downloadState.downloadedTrackIds
         val isDownloading = track.id in downloadState.downloadingTrackIds
-        val likes by likesViewModel.state.collectAsState()
-        val isLiked = track.id in likes.likedIds
+        val isLiked = track.id in likesState.likedIds
         ModalBottomSheet(
             onDismissRequest = { queueCandidate = null },
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -561,12 +577,21 @@ private fun FullPlayer(
     nowPlaying: NowPlaying,
     playbackSpeed: Float,
     sleepTimerMinutes: Long?,
+    shuffleEnabled: Boolean,
+    repeatMode: RepeatMode,
+    isLiked: Boolean,
+    isDownloaded: Boolean,
+    isDownloading: Boolean,
     fftBands: FloatArray,
     onDismiss: () -> Unit,
     onToggle: () -> Unit,
     onSeek: (Long) -> Unit,
     onCycleSpeed: () -> Unit,
     onCycleSleepTimer: () -> Unit,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeat: () -> Unit,
+    onToggleLike: () -> Unit,
+    onDownload: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
 ) {
@@ -706,10 +731,40 @@ private fun FullPlayer(
                     }
                     PlayerTransportControls(
                         playing = nowPlaying.playing,
+                        shuffleEnabled = shuffleEnabled,
+                        repeatMode = repeatMode,
+                        onToggleShuffle = onToggleShuffle,
+                        onCycleRepeat = onCycleRepeat,
                         onPrevious = onPrevious,
                         onToggle = onToggle,
                         onNext = onNext,
                     )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+                    ) {
+                        PlayerUtilityButton(
+                            icon = if (isLiked) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
+                            label = stringResource(if (isLiked) R.string.liked else R.string.like_song),
+                            onClick = onToggleLike,
+                            selected = isLiked,
+                            modifier = Modifier.weight(1f),
+                        )
+                        PlayerUtilityButton(
+                            icon = if (isDownloaded) Icons.Outlined.DownloadDone else Icons.Outlined.Download,
+                            label = stringResource(
+                                when {
+                                    isDownloaded -> R.string.downloaded
+                                    isDownloading -> R.string.downloading
+                                    else -> R.string.download
+                                },
+                            ),
+                            onClick = onDownload,
+                            selected = isDownloaded,
+                            enabled = !isDownloaded && !isDownloading,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
@@ -761,6 +816,10 @@ private fun PlayerHeader(onDismiss: () -> Unit) {
 @Composable
 private fun PlayerTransportControls(
     playing: Boolean,
+    shuffleEnabled: Boolean,
+    repeatMode: RepeatMode,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeat: () -> Unit,
     onPrevious: () -> Unit,
     onToggle: () -> Unit,
     onNext: () -> Unit,
@@ -770,6 +829,12 @@ private fun PlayerTransportControls(
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        PlayerModeButton(
+            icon = Icons.Outlined.Shuffle,
+            contentDescription = if (shuffleEnabled) R.string.shuffle_enabled else R.string.shuffle,
+            selected = shuffleEnabled,
+            onClick = onToggleShuffle,
+        )
         PlayerControlButton(Icons.Outlined.SkipPrevious, R.string.previous_track, onPrevious)
         PlayerControlButton(
             icon = if (playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
@@ -778,6 +843,40 @@ private fun PlayerTransportControls(
             primary = true,
         )
         PlayerControlButton(Icons.Outlined.SkipNext, R.string.next_track, onNext)
+        PlayerModeButton(
+            icon = if (repeatMode == RepeatMode.One) Icons.Outlined.RepeatOne else Icons.Outlined.Repeat,
+            contentDescription = when (repeatMode) {
+                RepeatMode.Off -> R.string.repeat_off
+                RepeatMode.All -> R.string.repeat_all
+                RepeatMode.One -> R.string.repeat_one
+            },
+            selected = repeatMode != RepeatMode.Off,
+            onClick = onCycleRepeat,
+        )
+    }
+}
+
+@Composable
+private fun PlayerModeButton(
+    icon: ImageVector,
+    @StringRes contentDescription: Int,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.size(NavaDimensions.PlayerModeControlSize),
+        shape = CircleShape,
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+        contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                icon,
+                contentDescription = stringResource(contentDescription),
+                modifier = Modifier.size(NavaSpacing.Xl),
+            )
+        }
     }
 }
 
@@ -811,13 +910,16 @@ private fun PlayerUtilityButton(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    enabled: Boolean = true,
 ) {
     Surface(
         onClick = onClick,
+        enabled = enabled,
         modifier = modifier.height(NavaDimensions.PlayerUtilityControlHeight),
         shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurface,
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
     ) {
         Row(
             modifier = Modifier.fillMaxSize().padding(horizontal = NavaSpacing.Md),
@@ -1552,44 +1654,162 @@ private fun ProfileShell(
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
     val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let(viewModel::uploadAvatar)
+        uri?.let(viewModel::selectAvatar)
     }
-    Column(modifier = modifier.fillMaxSize().padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Lg)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
-            Button(onClick = { avatarPicker.launch("image/*") }, enabled = !state.isSaving) {
-                state.avatarUrl?.let { url ->
-                    AsyncImage(
-                        model = ImageRequest.Builder(context)
-                            .data(url)
-                            .memoryCacheKey(state.avatarPath)
-                            .diskCacheKey(state.avatarPath)
-                            .build(),
-                        contentDescription = stringResource(R.string.user_avatar),
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.size(NavaSpacing.Xxl).clip(CircleShape),
+    if (state.isLoading) {
+        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+    } else {
+        LazyColumn(
+            modifier = modifier.fillMaxSize(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(NavaSpacing.Lg),
+            verticalArrangement = Arrangement.spacedBy(NavaSpacing.Lg),
+        ) {
+            item {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs),
+                ) {
+                    Box(modifier = Modifier.size(NavaDimensions.ProfileAvatarCanvasSize)) {
+                        UserAvatar(
+                            model = ImageRequest.Builder(context)
+                                .data(state.pendingAvatarUri ?: state.avatarUrl)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = stringResource(R.string.user_avatar),
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .size(NavaDimensions.ProfileAvatarSize)
+                                .border(
+                                    NavaDimensions.ProfileAvatarBorderWidth,
+                                    MaterialTheme.colorScheme.primary,
+                                    CircleShape,
+                                ),
+                        )
+                        Surface(
+                            modifier = Modifier.align(Alignment.BottomEnd).size(NavaDimensions.ProfileAvatarActionSize),
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shadowElevation = NavaSpacing.Xs,
+                        ) {
+                            IconButton(
+                                onClick = { avatarPicker.launch("image/*") },
+                                enabled = !state.isSaving,
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Edit,
+                                    contentDescription = stringResource(R.string.edit_profile_photo),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                )
+                            }
+                        }
+                        if (state.hasChanges) {
+                            Surface(
+                                modifier = Modifier.align(Alignment.BottomStart).size(NavaDimensions.ProfileAvatarActionSize),
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primary,
+                                shadowElevation = NavaSpacing.Xs,
+                            ) {
+                                IconButton(
+                                    onClick = viewModel::saveProfile,
+                                    enabled = !state.isSaving && state.displayName.trim().length in 2..60,
+                                ) {
+                                    if (state.isSaving) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(NavaSpacing.Xl),
+                                            color = MaterialTheme.colorScheme.onPrimary,
+                                            strokeWidth = NavaDimensions.AuthProgressStrokeWidth,
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.Outlined.Check,
+                                            contentDescription = stringResource(R.string.confirm_profile_changes),
+                                            tint = MaterialTheme.colorScheme.onPrimary,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Text(
+                        text = state.displayName,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
                     )
-                } ?: Icon(Icons.Outlined.AccountCircle, contentDescription = stringResource(R.string.user_avatar), modifier = Modifier.size(NavaSpacing.Xxl))
+                    Text(
+                        text = session.email,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                    Surface(
+                        shape = MaterialTheme.shapes.large,
+                        color = if (state.isPremium) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surfaceContainerHigh,
+                    ) {
+                        Text(
+                            text = stringResource(if (state.isPremium) R.string.premium_member else R.string.standard_member),
+                            modifier = Modifier.padding(horizontal = NavaSpacing.Md, vertical = NavaSpacing.Xs),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = if (state.isPremium) MaterialTheme.colorScheme.onPrimaryContainer
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
-            Column {
-                Text(if (state.isLoading) stringResource(R.string.profile_loading) else state.displayName, style = MaterialTheme.typography.titleLarge)
-                Text(session.email, style = MaterialTheme.typography.bodyMedium)
-                AssistChip(onClick = {}, label = { Text(stringResource(if (state.isPremium) R.string.premium else R.string.standard)) })
+            item {
+                OutlinedTextField(
+                    value = state.displayName,
+                    onValueChange = viewModel::changeDisplayName,
+                    enabled = !state.isSaving,
+                    label = { Text(stringResource(R.string.display_name)) },
+                    supportingText = { Text(stringResource(R.string.profile_changes_hint)) },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.large,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            if (!state.isPremium) {
+                item {
+                    FilledTonalButton(
+                        onClick = viewModel::upgrade,
+                        enabled = !state.isSaving && !state.hasChanges,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(stringResource(R.string.upgrade_demo)) }
+                }
+            }
+            item {
+                Surface(
+                    onClick = onDiscoverPeople,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Lg),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(NavaDimensions.ProfileDiscoverIconSize),
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                        ) {
+                            Icon(Icons.Outlined.Groups, contentDescription = null, modifier = Modifier.padding(NavaSpacing.Md))
+                        }
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
+                            Text(stringResource(R.string.discover_people), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.discover_people_subtitle), style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Icon(Icons.Outlined.ChevronRight, contentDescription = null)
+                    }
+                }
             }
         }
-        OutlinedTextField(
-            value = state.displayName,
-            onValueChange = viewModel::changeDisplayName,
-            enabled = !state.isLoading && !state.isSaving,
-            label = { Text(stringResource(R.string.display_name)) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Button(onClick = viewModel::saveProfile, enabled = !state.isLoading && !state.isSaving) {
-            if (state.isSaving) CircularProgressIndicator(modifier = Modifier.size(NavaSpacing.Md))
-            else Text(stringResource(R.string.save_profile))
-        }
-        if (!state.isPremium) Button(onClick = viewModel::upgrade, enabled = !state.isSaving) { Text(stringResource(R.string.upgrade_demo)) }
-        Button(onClick = onDiscoverPeople) { Text(stringResource(R.string.discover_people)) }
     }
     state.error?.let { error ->
         AlertDialog(
@@ -1601,55 +1821,304 @@ private fun ProfileShell(
 }
 
 @Composable
-private fun SocialShell(modifier: Modifier, viewModel: SocialViewModel = hiltViewModel()) {
+private fun SocialShell(
+    modifier: Modifier,
+    onBack: () -> Unit,
+    viewModel: SocialViewModel = hiltViewModel(),
+) {
     val state by viewModel.state.collectAsState()
     val chatViewModel: ChatViewModel = hiltViewModel()
     var messagesOpen by rememberSaveable { mutableStateOf(false) }
+    BackHandler {
+        when {
+            messagesOpen -> messagesOpen = false
+            state.selectedPerson != null -> viewModel.closeProfile()
+            else -> onBack()
+        }
+    }
     if (messagesOpen) {
         ChatShell(modifier = modifier, onBack = { messagesOpen = false }, viewModel = chatViewModel)
         return
     }
-    Column(modifier = modifier.fillMaxSize().padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
-        Text(stringResource(R.string.people), style = MaterialTheme.typography.headlineSmall)
-        Button(onClick = { messagesOpen = true }) { Text(stringResource(R.string.messages)) }
-        Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-            AssistChip(onClick = { viewModel.select(SocialSection.PEOPLE) }, label = { Text(stringResource(R.string.people)) })
-            AssistChip(onClick = { viewModel.select(SocialSection.FOLLOWING) }, label = { Text(stringResource(R.string.following)) })
-            AssistChip(onClick = { viewModel.select(SocialSection.FOLLOWERS) }, label = { Text(stringResource(R.string.followers)) })
-            AssistChip(onClick = { viewModel.select(SocialSection.PLAYLISTS) }, label = { Text(stringResource(R.string.public_playlists)) })
-        }
-        if (state.section == SocialSection.PEOPLE) OutlinedTextField(
-            value = state.query,
-            onValueChange = viewModel::search,
-            label = { Text(stringResource(R.string.search_people)) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+    state.selectedPerson?.let { person ->
+        PublicProfileScreen(
+            modifier = modifier,
+            person = state.profileDetails?.person ?: person,
+            details = state.profileDetails,
+            loading = state.profileLoading,
+            onBack = viewModel::closeProfile,
+            onToggleFollow = { viewModel.toggleFollow(state.profileDetails?.person ?: person) },
+            onMessage = {
+                chatViewModel.open(state.profileDetails?.person ?: person)
+                messagesOpen = true
+            },
         )
-        when {
-            state.loading -> CircularProgressIndicator()
-            state.error -> Button(onClick = { viewModel.select(state.section) }) { Text(stringResource(R.string.retry)) }
-            state.section == SocialSection.PLAYLISTS && state.playlists.isEmpty() -> Text(stringResource(R.string.playlists_empty))
-            state.people.isEmpty() && state.section != SocialSection.PLAYLISTS -> Text(stringResource(R.string.people_empty))
-            state.section == SocialSection.PLAYLISTS -> LazyColumn(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-                items(state.playlists, key = { it.id }) { playlist -> Card { Column(Modifier.padding(NavaSpacing.Md)) { Text(playlist.title, style = MaterialTheme.typography.titleMedium); Text(playlist.ownerName); playlist.description?.let { Text(it) }; Text(stringResource(R.string.track_count, playlist.trackCount)) } } }
+        return
+    }
+    Column(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.padding(horizontal = NavaSpacing.Lg, vertical = NavaSpacing.Md),
+            verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+        ) {
+            Text(stringResource(R.string.discover_title), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(
+                stringResource(R.string.discover_subtitle),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            FilledTonalButton(
+                onClick = { messagesOpen = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Outlined.Chat, contentDescription = null)
+                Spacer(Modifier.size(NavaSpacing.Sm))
+                Text(stringResource(R.string.messages))
             }
-            else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-                items(state.people, key = SocialPerson::id) { person ->
-                    Card {
-                        Row(Modifier.fillMaxWidth().padding(NavaSpacing.Md), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) { Text(person.displayName, style = MaterialTheme.typography.titleMedium) }
-                            Button(onClick = { viewModel.toggleFollow(person) }) {
-                                Text(stringResource(if (person.isFollowing) R.string.unfollow else R.string.follow))
-                            }
-                            IconButton(onClick = { chatViewModel.open(person); messagesOpen = true }) {
-                                Icon(Icons.Outlined.Chat, contentDescription = stringResource(R.string.open_chat))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                item { SocialFilterChip(state.section == SocialSection.PEOPLE, R.string.people) { viewModel.select(SocialSection.PEOPLE) } }
+                item { SocialFilterChip(state.section == SocialSection.FOLLOWING, R.string.following) { viewModel.select(SocialSection.FOLLOWING) } }
+                item { SocialFilterChip(state.section == SocialSection.FOLLOWERS, R.string.followers) { viewModel.select(SocialSection.FOLLOWERS) } }
+                item { SocialFilterChip(state.section == SocialSection.PLAYLISTS, R.string.public_playlists) { viewModel.select(SocialSection.PLAYLISTS) } }
+            }
+            if (state.section == SocialSection.PEOPLE) {
+                OutlinedTextField(
+                    value = state.query,
+                    onValueChange = viewModel::search,
+                    placeholder = { Text(stringResource(R.string.search_people)) },
+                    leadingIcon = { Icon(Icons.Outlined.ManageSearch, contentDescription = null) },
+                    trailingIcon = {
+                        if (state.query.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.search("") }) {
+                                Icon(Icons.Outlined.Clear, contentDescription = stringResource(R.string.clear_search))
                             }
                         }
-                    }
+                    },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.large,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+        when {
+            state.loading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            state.error -> SearchMessage(
+                title = stringResource(R.string.social_error),
+                body = stringResource(R.string.social_error_hint),
+                action = { Button(onClick = { viewModel.select(state.section) }) { Text(stringResource(R.string.retry)) } },
+            )
+            state.section == SocialSection.PLAYLISTS && state.playlists.isEmpty() -> SearchMessage(
+                title = stringResource(R.string.playlists_empty),
+                body = stringResource(R.string.public_playlists_empty_hint),
+            )
+            state.people.isEmpty() && state.section != SocialSection.PLAYLISTS -> SearchMessage(
+                title = stringResource(R.string.people_empty),
+                body = stringResource(R.string.people_empty_hint),
+            )
+            state.section == SocialSection.PLAYLISTS -> LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NavaSpacing.Lg, vertical = NavaSpacing.Sm),
+                verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+            ) {
+                items(state.playlists, key = PublicPlaylist::id) { playlist -> PublicPlaylistCard(playlist) }
+            }
+            else -> LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NavaSpacing.Lg, vertical = NavaSpacing.Sm),
+                verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+            ) {
+                items(state.people, key = SocialPerson::id) { person ->
+                    SocialPersonCard(
+                        person = person,
+                        onOpen = { viewModel.openProfile(person) },
+                        onToggleFollow = { viewModel.toggleFollow(person) },
+                        onMessage = {
+                            chatViewModel.open(person)
+                            messagesOpen = true
+                        },
+                    )
                 }
             }
         }
     }
+}
+
+@Composable
+private fun SocialFilterChip(selected: Boolean, @StringRes label: Int, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = {
+            Text(
+                stringResource(label),
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            )
+        },
+    )
+}
+
+@Composable
+private fun SocialPersonCard(
+    person: SocialPerson,
+    onOpen: () -> Unit,
+    onToggleFollow: () -> Unit,
+    onMessage: () -> Unit,
+) {
+    Card(
+        onClick = onOpen,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            UserAvatar(
+                model = person.avatarUrl,
+                contentDescription = stringResource(R.string.person_avatar, person.displayName),
+                modifier = Modifier.size(NavaDimensions.SocialAvatarSize),
+            )
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
+                Text(person.displayName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    stringResource(R.string.view_profile),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(onClick = onMessage) {
+                Icon(Icons.Outlined.Chat, contentDescription = stringResource(R.string.open_chat))
+            }
+            if (person.isFollowing) {
+                OutlinedButton(onClick = onToggleFollow) { Text(stringResource(R.string.following)) }
+            } else {
+                FilledTonalButton(onClick = onToggleFollow) { Text(stringResource(R.string.follow)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PublicProfileScreen(
+    modifier: Modifier,
+    person: SocialPerson,
+    details: SocialProfileDetails?,
+    loading: Boolean,
+    onBack: () -> Unit,
+    onToggleFollow: () -> Unit,
+    onMessage: () -> Unit,
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(NavaSpacing.Lg),
+        verticalArrangement = Arrangement.spacedBy(NavaSpacing.Lg),
+    ) {
+        item {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Outlined.ArrowBack, contentDescription = stringResource(R.string.back_to_people))
+            }
+        }
+        item {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+            ) {
+                UserAvatar(
+                    model = person.avatarUrl,
+                    contentDescription = stringResource(R.string.person_avatar, person.displayName),
+                    modifier = Modifier
+                        .size(NavaDimensions.PublicProfileAvatarSize)
+                        .border(
+                            NavaDimensions.ProfileAvatarBorderWidth,
+                            MaterialTheme.colorScheme.primary,
+                            CircleShape,
+                        ),
+                )
+                Text(person.displayName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                Text(stringResource(R.string.public_profile), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (person.isFollowing) {
+                    OutlinedButton(onClick = onToggleFollow) { Text(stringResource(R.string.unfollow)) }
+                } else {
+                    Button(onClick = onToggleFollow) { Text(stringResource(R.string.follow)) }
+                }
+                FilledTonalButton(onClick = onMessage) {
+                    Icon(Icons.Outlined.Chat, contentDescription = null)
+                    Spacer(Modifier.size(NavaSpacing.Sm))
+                    Text(stringResource(R.string.messages))
+                }
+            }
+        }
+        if (loading) {
+            item { Box(modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Xl), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+        } else {
+            details?.let { profile ->
+                item {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                        ProfileStat(profile.followersCount.toString(), R.string.followers, Modifier.weight(1f))
+                        ProfileStat(profile.followingCount.toString(), R.string.following, Modifier.weight(1f))
+                        ProfileStat(profile.playlists.size.toString(), R.string.playlists, Modifier.weight(1f))
+                    }
+                }
+                item {
+                    Text(stringResource(R.string.public_playlists), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                }
+                if (profile.playlists.isEmpty()) {
+                    item { Text(stringResource(R.string.public_playlists_empty_hint), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                } else {
+                    items(profile.playlists, key = PublicPlaylist::id) { playlist -> PublicPlaylistCard(playlist) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileStat(value: String, @StringRes label: Int, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Column(
+            modifier = Modifier.padding(NavaSpacing.Md),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(stringResource(label), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun PublicPlaylistCard(playlist: PublicPlaylist) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Column(modifier = Modifier.padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
+            Text(playlist.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(playlist.ownerName, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+            playlist.description?.takeIf(String::isNotBlank)?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(stringResource(R.string.track_count, playlist.trackCount), style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+@Composable
+private fun UserAvatar(model: Any?, contentDescription: String, modifier: Modifier = Modifier) {
+    AsyncImage(
+        model = model,
+        contentDescription = contentDescription,
+        contentScale = ContentScale.Crop,
+        fallback = painterResource(R.drawable.ic_launcher_foreground),
+        error = painterResource(R.drawable.ic_launcher_foreground),
+        modifier = modifier.clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+    )
 }
 
 @Composable

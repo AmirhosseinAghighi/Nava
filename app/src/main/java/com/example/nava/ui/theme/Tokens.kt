@@ -27,6 +27,7 @@ object NavaDimensions {
     val PlayerArtworkMaxSize = 300.dp
     val PlayerPrimaryControlSize = 76.dp
     val PlayerSecondaryControlSize = 56.dp
+    val PlayerModeControlSize = 48.dp
     val PlayerUtilityControlHeight = 52.dp
     val PlayerVisualizerHeight = 48.dp
     val PlayerSwipeThreshold = 88.dp
@@ -45,6 +46,13 @@ object NavaDimensions {
     val SearchEmptyGlyphSize = 40.dp
     val SearchActionArtworkSize = 64.dp
     val SearchActionIconSize = 44.dp
+    val ProfileAvatarCanvasSize = 168.dp
+    val ProfileAvatarSize = 140.dp
+    val ProfileAvatarActionSize = 48.dp
+    val ProfileAvatarBorderWidth = 3.dp
+    val ProfileDiscoverIconSize = 52.dp
+    val SocialAvatarSize = 58.dp
+    val PublicProfileAvatarSize = 124.dp
 }
 
 val NavaShapes = Shapes(
