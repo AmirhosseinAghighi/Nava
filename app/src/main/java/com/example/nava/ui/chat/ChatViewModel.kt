@@ -295,7 +295,7 @@ class ChatViewModel @Inject constructor(
 
     private suspend fun startRealtime(conversation: ChatConversation) {
         val currentUser = supabase.auth.currentUserOrNull() ?: return
-        val channel = supabase.channel("conversation-events:${conversation.id}")
+        val channel = supabase.channel("conversation:${conversation.id}")
         activeChannel = channel
         liveMessagesJob = viewModelScope.launch {
             channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") {
