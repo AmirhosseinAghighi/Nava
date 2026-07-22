@@ -2,32 +2,40 @@ package com.example.nava.ui
 
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -36,6 +44,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.ManageSearch
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.QueueMusic
@@ -44,6 +53,8 @@ import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.SkipNext
 import androidx.compose.material.icons.outlined.SkipPrevious
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -70,6 +81,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,13 +91,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
@@ -97,6 +116,7 @@ import com.example.nava.domain.preferences.AppLanguage
 import com.example.nava.domain.preferences.FontScale
 import com.example.nava.domain.preferences.ThemeMode
 import com.example.nava.domain.preferences.UserPreferences
+import com.example.nava.ui.theme.NavaDimensions
 import com.example.nava.ui.theme.NavaSpacing
 import com.example.nava.ui.home.HomeUiState
 import com.example.nava.ui.home.HomeViewModel
@@ -116,6 +136,10 @@ import com.example.nava.ui.theme.NavaMotion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import java.text.DecimalFormat
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.sin
 
 private data class NavItem(@StringRes val title: Int, val icon: ImageVector)
 
@@ -143,6 +167,8 @@ fun NavaAppShell(
     val downloadViewModel: DownloadViewModel = hiltViewModel()
     val likesViewModel: LikesViewModel = hiltViewModel()
     val nowPlaying by playbackViewModel.nowPlaying.collectAsState()
+    val playbackSpeed by playbackViewModel.playbackSpeed.collectAsState()
+    val sleepTimerMinutes by playbackViewModel.sleepTimerMinutes.collectAsState()
     val playbackError by playbackViewModel.playbackError.collectAsState()
     val downloadState by downloadViewModel.state.collectAsState()
     val downloadError by downloadViewModel.downloadError.collectAsState()
@@ -201,16 +227,18 @@ fun NavaAppShell(
     nowPlaying?.let { now ->
         AnimatedVisibility(
             visible = playerExpanded,
-            enter = fadeIn(tween(NavaMotion.Standard)) + scaleIn(tween(NavaMotion.Standard)),
-            exit = fadeOut(tween(NavaMotion.Fast)) + scaleOut(tween(NavaMotion.Fast)),
+            enter = fadeIn(tween(NavaMotion.Standard)) + slideInVertically(tween(NavaMotion.Standard)) { it },
+            exit = fadeOut(tween(NavaMotion.Fast)) + slideOutVertically(tween(NavaMotion.Standard)) { it },
         ) {
             FullPlayer(
                 nowPlaying = now,
+                playbackSpeed = playbackSpeed,
+                sleepTimerMinutes = sleepTimerMinutes,
                 onDismiss = { playerExpanded = false },
                 onToggle = { if (now.playing) playbackViewModel.pause() else playbackViewModel.resume() },
                 onSeek = playbackViewModel::seekTo,
-                onSpeed = playbackViewModel::setSpeed,
-                onSleep = playbackViewModel::setSleepTimer,
+                onCycleSpeed = playbackViewModel::cycleSpeed,
+                onCycleSleepTimer = playbackViewModel::cycleSleepTimer,
                 onPrevious = playbackViewModel::skipToPrevious,
                 onNext = playbackViewModel::skipToNext,
             )
@@ -312,102 +340,305 @@ private fun MiniPlayer(nowPlaying: NowPlaying, onToggle: () -> Unit, onOpen: () 
 @Composable
 private fun FullPlayer(
     nowPlaying: NowPlaying,
+    playbackSpeed: Float,
+    sleepTimerMinutes: Long?,
     onDismiss: () -> Unit,
     onToggle: () -> Unit,
     onSeek: (Long) -> Unit,
-    onSpeed: (Float) -> Unit,
-    onSleep: (Long) -> Unit,
+    onCycleSpeed: () -> Unit,
+    onCycleSleepTimer: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
 ) {
-    val pulse by animateFloatAsState(targetValue = if (nowPlaying.playing) 1f else .35f, animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "visualizer")
+    BackHandler(onBack = onDismiss)
+    val fallbackPaletteColor = MaterialTheme.colorScheme.primary
+    var paletteColor by remember(nowPlaying.track.id) { mutableStateOf(fallbackPaletteColor) }
     var scrubPosition by rememberSaveable(nowPlaying.track.id) { mutableStateOf(nowPlaying.positionMs.toFloat()) }
     var scrubbing by rememberSaveable(nowPlaying.track.id) { mutableStateOf(false) }
+    var dragX by remember(nowPlaying.track.id) { mutableFloatStateOf(0f) }
+    var dragY by remember(nowPlaying.track.id) { mutableFloatStateOf(0f) }
+    val swipeThreshold = with(LocalDensity.current) { NavaDimensions.PlayerSwipeThreshold.toPx() }
+    val speedLabel = remember(playbackSpeed) { DecimalFormat("0.##").format(playbackSpeed) }
     LaunchedEffect(nowPlaying.positionMs, scrubbing) {
         if (!scrubbing) scrubPosition = nowPlaying.positionMs.toFloat()
     }
     val durationMs = nowPlaying.durationMs.coerceAtLeast(1L)
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(nowPlaying.track.title) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
-                Text(nowPlaying.track.artistName, style = MaterialTheme.typography.bodyLarge)
-                NowPlayingArtwork(nowPlaying)
-                Canvas(modifier = Modifier.fillMaxWidth().size(NavaSpacing.Xxl)) {
-                    val barWidth = size.width / 11f
-                    repeat(8) { index ->
-                        val height = size.height * (0.2f + ((index % 3) * .18f) + pulse * .22f)
-                        drawRect(Color(0xFFFCA311), topLeft = androidx.compose.ui.geometry.Offset(barWidth * (index + 1), size.height - height), size = androidx.compose.ui.geometry.Size(barWidth * .5f, height))
-                    }
-                }
-                Slider(
-                    value = scrubPosition.coerceIn(0f, durationMs.toFloat()),
-                    onValueChange = { value ->
-                        scrubbing = true
-                        scrubPosition = value
-                    },
-                    onValueChangeFinished = {
-                        onSeek(scrubPosition.toLong())
-                        scrubbing = false
-                    },
-                    valueRange = 0f..durationMs.toFloat(),
-                )
-                Text(
-                    stringResource(
-                        R.string.playback_position,
-                        playbackMinutes(scrubPosition.toLong()),
-                        playbackSeconds(scrubPosition.toLong()),
-                        playbackMinutes(durationMs),
-                        playbackSeconds(durationMs),
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            paletteColor.copy(alpha = .58f),
+                            MaterialTheme.colorScheme.background,
+                            MaterialTheme.colorScheme.background,
+                        ),
                     ),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically,
+                ),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .padding(horizontal = NavaSpacing.Xl),
+            ) {
+                PlayerHeader(onDismiss)
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(bottom = NavaSpacing.Md),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.SpaceEvenly,
                 ) {
-                    IconButton(onClick = onPrevious) {
-                        Icon(
-                            Icons.Outlined.SkipPrevious,
-                            contentDescription = stringResource(R.string.previous_track),
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .graphicsLayer {
+                                translationX = dragX * .45f
+                                translationY = dragY.coerceAtLeast(0f) * .35f
+                                rotationZ = (dragX / swipeThreshold).coerceIn(-1f, 1f) * 3f
+                                alpha = (1f - (abs(dragX) + dragY.coerceAtLeast(0f)) / (swipeThreshold * 5f))
+                                    .coerceIn(.72f, 1f)
+                            }
+                            .pointerInput(nowPlaying.track.id, swipeThreshold) {
+                                detectDragGestures(
+                                    onDragStart = {
+                                        dragX = 0f
+                                        dragY = 0f
+                                    },
+                                    onDragCancel = {
+                                        dragX = 0f
+                                        dragY = 0f
+                                    },
+                                    onDragEnd = {
+                                        when {
+                                            abs(dragX) > abs(dragY) && abs(dragX) >= swipeThreshold -> {
+                                                if (dragX > 0f) onPrevious() else onNext()
+                                            }
+                                            dragY >= swipeThreshold -> onDismiss()
+                                        }
+                                        dragX = 0f
+                                        dragY = 0f
+                                    },
+                                ) { change, dragAmount ->
+                                    change.consume()
+                                    dragX += dragAmount.x
+                                    dragY += dragAmount.y
+                                }
+                            },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs),
+                    ) {
+                        Text(
+                            text = nowPlaying.track.title,
+                            modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            textAlign = TextAlign.Center,
+                        )
+                        Text(
+                            text = nowPlaying.track.artistName,
+                            modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                        Spacer(Modifier.height(NavaSpacing.Sm))
+                        NowPlayingArtwork(
+                            nowPlaying = nowPlaying,
+                            onPaletteColorChanged = { paletteColor = it },
+                        )
+                        Text(
+                            text = stringResource(R.string.player_swipe_hint),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    IconButton(onClick = onToggle) {
-                        Icon(
-                            if (nowPlaying.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
-                            contentDescription = stringResource(
-                                if (nowPlaying.playing) R.string.pause_playback else R.string.resume_playback,
+                    EqualizerVisualizer(isPlaying = nowPlaying.playing)
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Slider(
+                            value = scrubPosition.coerceIn(0f, durationMs.toFloat()),
+                            onValueChange = { value ->
+                                scrubbing = true
+                                scrubPosition = value
+                            },
+                            onValueChangeFinished = {
+                                onSeek(scrubPosition.toLong())
+                                scrubbing = false
+                            },
+                            valueRange = 0f..durationMs.toFloat(),
+                        )
+                        Text(
+                            text = stringResource(
+                                R.string.playback_position,
+                                playbackMinutes(scrubPosition.toLong()),
+                                playbackSeconds(scrubPosition.toLong()),
+                                playbackMinutes(durationMs),
+                                playbackSeconds(durationMs),
                             ),
+                            modifier = Modifier.align(Alignment.End),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    IconButton(onClick = onNext) {
-                        Icon(
-                            Icons.Outlined.SkipNext,
-                            contentDescription = stringResource(R.string.next_track),
+                    PlayerTransportControls(
+                        playing = nowPlaying.playing,
+                        onPrevious = onPrevious,
+                        onToggle = onToggle,
+                        onNext = onNext,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+                    ) {
+                        PlayerUtilityButton(
+                            icon = Icons.Outlined.Speed,
+                            label = stringResource(R.string.playback_speed_value, speedLabel),
+                            onClick = onCycleSpeed,
+                            modifier = Modifier.weight(1f),
+                        )
+                        PlayerUtilityButton(
+                            icon = Icons.Outlined.Timer,
+                            label = sleepTimerMinutes?.let { stringResource(R.string.sleep_timer_minutes, it) }
+                                ?: stringResource(R.string.sleep_timer_off),
+                            onClick = onCycleSleepTimer,
+                            modifier = Modifier.weight(1f),
                         )
                     }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-                    AssistChip(onClick = { onSpeed(0.75f) }, label = { Text("0.75×") })
-                    AssistChip(onClick = { onSpeed(1f) }, label = { Text("1×") })
-                    AssistChip(onClick = { onSpeed(1.25f) }, label = { Text("1.25×") })
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-                    AssistChip(onClick = { onSpeed(1.5f) }, label = { Text("1.5×") })
-                    AssistChip(onClick = { onSpeed(2f) }, label = { Text("2×") })
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-                    AssistChip(onClick = { onSleep(15) }, label = { Text(stringResource(R.string.sleep_15)) })
-                    AssistChip(onClick = { onSleep(30) }, label = { Text(stringResource(R.string.sleep_30)) })
                 }
             }
-        },
-        confirmButton = {
-            Button(onClick = onDismiss) { Text(stringResource(R.string.close)) }
-        },
+        }
+    }
+}
+
+@Composable
+private fun PlayerHeader(onDismiss: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().height(NavaDimensions.PlayerSecondaryControlSize),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onDismiss, modifier = Modifier.size(NavaDimensions.PlayerSecondaryControlSize)) {
+            Icon(
+                Icons.Outlined.KeyboardArrowDown,
+                contentDescription = stringResource(R.string.collapse_player),
+                modifier = Modifier.size(NavaSpacing.Xxl),
+            )
+        }
+        Text(
+            text = stringResource(R.string.now_playing),
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.size(NavaDimensions.PlayerSecondaryControlSize))
+    }
+}
+
+@Composable
+private fun PlayerTransportControls(
+    playing: Boolean,
+    onPrevious: () -> Unit,
+    onToggle: () -> Unit,
+    onNext: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PlayerControlButton(Icons.Outlined.SkipPrevious, R.string.previous_track, onPrevious)
+        PlayerControlButton(
+            icon = if (playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
+            contentDescription = if (playing) R.string.pause_playback else R.string.resume_playback,
+            onClick = onToggle,
+            primary = true,
+        )
+        PlayerControlButton(Icons.Outlined.SkipNext, R.string.next_track, onNext)
+    }
+}
+
+@Composable
+private fun PlayerControlButton(
+    icon: ImageVector,
+    @StringRes contentDescription: Int,
+    onClick: () -> Unit,
+    primary: Boolean = false,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.size(if (primary) NavaDimensions.PlayerPrimaryControlSize else NavaDimensions.PlayerSecondaryControlSize),
+        shape = CircleShape,
+        color = if (primary) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = if (primary) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                icon,
+                contentDescription = stringResource(contentDescription),
+                modifier = Modifier.size(if (primary) NavaSpacing.Xxl else NavaSpacing.Xl),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlayerUtilityButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(NavaDimensions.PlayerUtilityControlHeight),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = NavaSpacing.Md),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(NavaSpacing.Xl))
+            Spacer(Modifier.size(NavaSpacing.Sm))
+            Text(label, style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+@Composable
+private fun EqualizerVisualizer(isPlaying: Boolean) {
+    val transition = rememberInfiniteTransition(label = "equalizer")
+    val phase by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2f * PI).toFloat(),
+        animationSpec = infiniteRepeatable(tween(NavaMotion.Slow * 4, easing = LinearEasing)),
+        label = "equalizer_phase",
     )
+    val barColor = MaterialTheme.colorScheme.primary
+    Canvas(modifier = Modifier.fillMaxWidth().height(NavaDimensions.PlayerVisualizerHeight)) {
+        val barCount = 28
+        val slotWidth = size.width / barCount
+        val barWidth = slotWidth * .46f
+        repeat(barCount) { index ->
+            val normalizedIndex = index.toFloat() / (barCount - 1)
+            val envelope = .42f + sin(normalizedIndex * PI).toFloat() * .58f
+            val wave = ((sin((if (isPlaying) phase else 0f) + index * .68f) + 1f) / 2f)
+            val level = if (isPlaying) .16f + wave * .78f * envelope else .12f + envelope * .12f
+            val barHeight = size.height * level
+            drawRoundRect(
+                color = barColor,
+                topLeft = Offset(slotWidth * index + (slotWidth - barWidth) / 2f, (size.height - barHeight) / 2f),
+                size = Size(barWidth, barHeight),
+                cornerRadius = CornerRadius(barWidth / 2f),
+            )
+        }
+    }
 }
 
 private fun playbackMinutes(timeMs: Long): Long = timeMs / 60_000L
@@ -415,10 +646,12 @@ private fun playbackMinutes(timeMs: Long): Long = timeMs / 60_000L
 private fun playbackSeconds(timeMs: Long): Long = (timeMs / 1_000L) % 60L
 
 @Composable
-private fun NowPlayingArtwork(nowPlaying: NowPlaying) {
+private fun NowPlayingArtwork(
+    nowPlaying: NowPlaying,
+    onPaletteColorChanged: (Color) -> Unit,
+) {
     val fallbackPaletteColor = MaterialTheme.colorScheme.primary
     var bitmap by remember(nowPlaying.track.coverImageUrl) { mutableStateOf<Bitmap?>(null) }
-    var paletteColor by remember(nowPlaying.track.coverImageUrl) { mutableStateOf(fallbackPaletteColor) }
     val coverRotation = remember(nowPlaying.track.id) { Animatable(0f) }
     LaunchedEffect(nowPlaying.track.id, nowPlaying.playing) {
         if (!nowPlaying.playing) {
@@ -434,20 +667,25 @@ private fun NowPlayingArtwork(nowPlaying: NowPlaying) {
     }
     LaunchedEffect(bitmap) {
         bitmap?.let { cover ->
-            paletteColor = withContext(Dispatchers.Default) {
-                // Coil may decode artwork as a hardware bitmap. Palette reads pixels directly,
-                // so give it a software copy before generating the player gradient.
+            val paletteColor = withContext(Dispatchers.Default) {
                 val softwareBitmap = cover.copy(Bitmap.Config.ARGB_8888, false)
-                Color(Palette.from(softwareBitmap).generate().getVibrantColor(paletteColor.toArgb()))
+                Color(Palette.from(softwareBitmap).generate().getVibrantColor(fallbackPaletteColor.toArgb()))
             }
+            onPaletteColorChanged(paletteColor)
         }
     }
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .widthIn(max = NavaDimensions.PlayerArtworkMaxSize)
             .aspectRatio(1f)
             .clip(CircleShape)
-            .background(Brush.verticalGradient(listOf(paletteColor, MaterialTheme.colorScheme.surface))),
+            .border(
+                NavaDimensions.PlayerArtworkBorderWidth,
+                MaterialTheme.colorScheme.onBackground.copy(alpha = .18f),
+                CircleShape,
+            )
+            .padding(NavaSpacing.Sm),
         contentAlignment = Alignment.Center,
     ) {
         AsyncImage(
@@ -461,6 +699,17 @@ private fun NowPlayingArtwork(nowPlaying: NowPlaying) {
             onSuccess = { result ->
                 bitmap = (result.result.drawable as? BitmapDrawable)?.bitmap
             },
+        )
+        Box(
+            modifier = Modifier
+                .size(NavaSpacing.Xxl)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = .9f))
+                .border(
+                    NavaDimensions.PlayerArtworkBorderWidth,
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = .25f),
+                    CircleShape,
+                ),
         )
     }
 }

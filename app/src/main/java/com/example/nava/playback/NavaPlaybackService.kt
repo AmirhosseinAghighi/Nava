@@ -159,7 +159,12 @@ class NavaPlaybackService : MediaSessionService() {
             ACTION_RESUME -> player.play()
             ACTION_SEEK -> player.seekTo(intent.getLongExtra(EXTRA_POSITION_MS, player.currentPosition))
             ACTION_SPEED -> player.setPlaybackSpeed(intent.getFloatExtra(EXTRA_SPEED, 1f))
-            ACTION_SLEEP -> { sleepHandler.removeCallbacks(sleepRunnable); sleepHandler.postDelayed(sleepRunnable, intent.getLongExtra(EXTRA_SLEEP_MS, 0)) }
+            ACTION_SLEEP -> {
+                sleepHandler.removeCallbacks(sleepRunnable)
+                intent.getLongExtra(EXTRA_SLEEP_MS, 0L)
+                    .takeIf { it > 0L }
+                    ?.let { delayMs -> sleepHandler.postDelayed(sleepRunnable, delayMs) }
+            }
             ACTION_NEXT -> sendSkipBroadcast(ACTION_SKIP_NEXT)
             ACTION_PREVIOUS -> sendSkipBroadcast(ACTION_SKIP_PREVIOUS)
         }
