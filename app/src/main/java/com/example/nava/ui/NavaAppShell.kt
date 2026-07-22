@@ -3539,13 +3539,54 @@ private fun QuickActionsGrid(
         verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-            QuickAction(R.string.quick_liked, R.string.quick_liked_subtitle, Icons.Outlined.FavoriteBorder, Modifier.weight(1f), onLiked)
-            QuickAction(R.string.quick_recent, R.string.quick_recent_subtitle, Icons.Outlined.History, Modifier.weight(1f), onRecent)
+            QuickAction(
+                R.string.quick_liked,
+                R.string.quick_liked_subtitle,
+                Icons.Outlined.FavoriteBorder,
+                QuickActionPalette.Liked,
+                Modifier.weight(1f),
+                onLiked,
+            )
+            QuickAction(
+                R.string.quick_recent,
+                R.string.quick_recent_subtitle,
+                Icons.Outlined.History,
+                QuickActionPalette.Recent,
+                Modifier.weight(1f),
+                onRecent,
+            )
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-            QuickAction(R.string.quick_playlists, R.string.quick_playlists_subtitle, Icons.Outlined.QueueMusic, Modifier.weight(1f), onMyPlaylists)
-            QuickAction(R.string.quick_top_playlists, R.string.quick_top_playlists_subtitle, Icons.Outlined.Public, Modifier.weight(1f), onTopPlaylists)
+            QuickAction(
+                R.string.quick_playlists,
+                R.string.quick_playlists_subtitle,
+                Icons.Outlined.QueueMusic,
+                QuickActionPalette.MyPlaylists,
+                Modifier.weight(1f),
+                onMyPlaylists,
+            )
+            QuickAction(
+                R.string.quick_top_playlists,
+                R.string.quick_top_playlists_subtitle,
+                Icons.Outlined.Public,
+                QuickActionPalette.TopPlaylists,
+                Modifier.weight(1f),
+                onTopPlaylists,
+            )
         }
+    }
+}
+
+private data class QuickActionPalette(
+    val start: Color,
+    val end: Color,
+    val accent: Color,
+) {
+    companion object {
+        val Liked = QuickActionPalette(Color(0xFF5B2039), Color(0xFF321827), Color(0xFFFF78A6))
+        val Recent = QuickActionPalette(Color(0xFF14504D), Color(0xFF173332), Color(0xFF62DED4))
+        val MyPlaylists = QuickActionPalette(Color(0xFF35356F), Color(0xFF232442), Color(0xFFA8ABFF))
+        val TopPlaylists = QuickActionPalette(Color(0xFF63461A), Color(0xFF382B18), Color(0xFFFFC15C))
     }
 }
 
@@ -3554,38 +3595,44 @@ private fun QuickAction(
     @StringRes label: Int,
     @StringRes subtitle: Int,
     icon: ImageVector,
+    palette: QuickActionPalette,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     Surface(
         onClick = onClick,
-        modifier = modifier.height(104.dp),
+        modifier = modifier
+            .height(104.dp)
+            .border(1.dp, palette.accent.copy(alpha = .24f), MaterialTheme.shapes.large),
         shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurface,
+        color = palette.start,
+        contentColor = NavaWhite,
         shadowElevation = NavaSpacing.Xs,
     ) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(NavaSpacing.Md),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Brush.linearGradient(listOf(palette.start, palette.end)))
+                .padding(NavaSpacing.Md),
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     modifier = Modifier.size(38.dp),
                     shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    color = palette.accent.copy(alpha = .18f),
+                    contentColor = palette.accent,
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
                     }
                 }
                 Spacer(Modifier.weight(1f))
-                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = palette.accent)
             }
             Column {
                 Text(text = stringResource(label), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(text = stringResource(subtitle), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(text = stringResource(subtitle), style = MaterialTheme.typography.labelSmall, color = NavaWhite.copy(alpha = .76f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
