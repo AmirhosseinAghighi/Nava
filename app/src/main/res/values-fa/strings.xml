@@ -2,17 +2,44 @@
     <string name="app_name">نوا</string>
     <string name="auth_title">صدای تو، فضای تو.</string>
     <string name="auth_subtitle">برای ادامه وارد شوید یا حساب بسازید.</string>
+    <string name="auth_brand_tagline">صدای تو، فضای تو</string>
+    <string name="auth_logo_content_description">لوگوی اپلیکیشن نوا</string>
+    <string name="auth_sign_in_title">دوباره خوش آمدید</string>
+    <string name="auth_sign_in_subtitle">برای ادامه شنیدن و کشف موسیقی‌های تازه وارد شوید.</string>
+    <string name="auth_sign_up_title">حساب خود را بسازید</string>
+    <string name="auth_sign_up_subtitle">یک نام نمایشی انتخاب کنید و به جامعه نوا بپیوندید.</string>
     <string name="email">نشانی ایمیل</string>
     <string name="password">گذرواژه</string>
     <string name="sign_in">ورود</string>
     <string name="create_account">ساخت حساب</string>
     <string name="invalid_credentials">یک ایمیل معتبر و گذرواژه حداقل ۶ کاراکتری وارد کنید.</string>
+    <string name="invalid_registration">نام نمایشی ۲ تا ۶۰ کاراکتری، ایمیل معتبر و گذرواژه حداقل ۶ کاراکتری وارد کنید.</string>
     <string name="authentication_failed">درخواست انجام نشد. اتصال و مشخصات حساب را بررسی کنید و دوباره تلاش کنید.</string>
     <string name="account_confirmation_sent">درخواست ساخت حساب ثبت شد. پیش از ورود، ایمیل تأیید را بررسی کنید.</string>
     <string name="auth_working">لطفاً صبر کنید…</string>
+    <string name="display_name_hint">بین ۲ تا ۶۰ کاراکتر</string>
+    <string name="username">نام کاربری</string>
+    <string name="password_hint">حداقل ۶ کاراکتر</string>
+    <string name="show_password">نمایش گذرواژه</string>
+    <string name="hide_password">پنهان کردن گذرواژه</string>
+    <string name="no_account">حساب کاربری ندارید؟</string>
+    <string name="register_now">ثبت‌نام کنید</string>
+    <string name="already_have_account">قبلاً حساب ساخته‌اید؟</string>
+    <string name="sign_in_now">وارد شوید</string>
+    <string name="back_to_sign_in">بازگشت به ورود</string>
     <string name="home">خانه</string>
     <string name="search">جستجو</string>
     <string name="search_catalog">جستجوی آهنگ یا هنرمند</string>
+    <string name="search_title">آهنگ محبوب بعدی‌تان را پیدا کنید</string>
+    <string name="search_subtitle">در کاتالوگ نوا براساس آهنگ یا هنرمند جستجو کنید.</string>
+    <string name="search_start_title">دوست دارید چه چیزی بشنوید؟</string>
+    <string name="search_start_subtitle">برای شروع، نام آهنگ یا هنرمند را وارد کنید.</string>
+    <string name="search_results_count">%1$d نتیجه</string>
+    <string name="clear_search">پاک کردن جستجو</string>
+    <string name="play_track">پخش %1$s</string>
+    <string name="track_more_options">گزینه‌های بیشتر برای %1$s</string>
+    <string name="search_error_hint">اتصال اینترنت را بررسی و دوباره جستجو کنید.</string>
+    <string name="search_empty_hint">املای دیگری، هنرمند یا فیلتر زبان متفاوتی را امتحان کنید.</string>
     <string name="filter_all">همه</string><string name="filter_english">انگلیسی</string><string name="filter_persian">فارسی</string>
     <string name="search_error">جستجو در دسترس نیست. دوباره تلاش کنید.</string><string name="search_empty">موسیقی مطابقی پیدا نشد.</string>
     <string name="downloads">دانلودها</string>
@@ -26,6 +53,7 @@
     <string name="library_title">کتابخانه شما</string><string name="liked_count">آهنگ‌های پسندیده: %1$d</string><string name="like_song">پسندیدن</string><string name="unlike_song">حذف پسند</string><string name="liked_songs_empty">هنوز آهنگی را نپسندیده‌اید.</string><string name="library_empty">برای ساخت کتابخانه، پلی‌لیست بسازید یا آهنگی را بپسندید.</string><string name="library_error">بارگیری کتابخانه انجام نشد.</string>
     <string name="profile">پروفایل</string>
     <string name="home_welcome">خوش آمدید</string>
+    <string name="home_welcome_subtitle">حال‌وهوایتان را انتخاب کنید، ادامه‌اش با نوا.</string>
     <string name="shell_placeholder">این بخش برای قابلیت بعدی آماده است.</string>
     <string name="settings">تنظیمات</string>
     <string name="theme">پوسته</string>
@@ -70,10 +98,17 @@
     <string name="next_track">آهنگ بعدی</string>
     <string name="playback_position">%1$d:%2$02d / %3$d:%4$02d</string>
     <string name="now_playing_artwork">تصویر در حال پخش</string>
+    <string name="now_playing">در حال پخش</string>
+    <string name="collapse_player">جمع کردن پلیر</string>
+    <string name="player_swipe_hint">برای تغییر آهنگ روی کاور به طرفین و برای بستن به پایین بکشید</string>
+    <string name="playback_speed_value">سرعت %1$s×</string>
+    <string name="sleep_timer_off">تایمر خواب خاموش</string>
+    <string name="sleep_timer_minutes">توقف پس از %1$d دقیقه</string>
     <string name="playback_unavailable">این آهنگ فعلاً قابل پخش نیست. بارگذاری فایل صوتی آن را بررسی کنید و دوباره تلاش کنید.</string>
     <string name="playback_channel_name">پخش موسیقی</string>
     <string name="sleep_15">توقف پس از ۱۵ دقیقه</string><string name="sleep_30">توقف پس از ۳۰ دقیقه</string><string name="close">بستن</string>
     <string name="song_actions">عملیات آهنگ</string>
+    <string name="play_now">پخش اکنون</string>
     <string name="add_to_queue">افزودن به صف پخش</string>
     <string name="quick_liked">آهنگ‌های پسندیده</string>
     <string name="quick_recent">اخیراً پخش‌شده</string>
@@ -85,6 +120,8 @@
     <string name="home_global">پلی‌لیست‌های جهانی</string>
     <string name="home_local">پلی‌لیست‌های محلی</string>
     <string name="home_carousel_caption">صداهای تازه از کاتالوگ نوا</string>
+    <string name="track_artwork">کاور %1$s</string>
+    <string name="featured_badge">پیشنهاد ویژه</string>
     <string name="home_load_error">فعلاً کاتالوگ بارگیری نشد.</string>
     <string name="retry">تلاش دوباره</string>
 </resources>

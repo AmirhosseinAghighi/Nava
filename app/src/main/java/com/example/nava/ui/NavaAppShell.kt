@@ -2,32 +2,39 @@ package com.example.nava.ui
 
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -35,8 +42,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Clear
+import androidx.compose.material.icons.outlined.Favorite
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.ManageSearch
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material.icons.outlined.Settings
@@ -44,6 +58,8 @@ import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.SkipNext
 import androidx.compose.material.icons.outlined.SkipPrevious
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -51,10 +67,13 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
@@ -70,6 +89,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,13 +99,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
@@ -93,11 +127,15 @@ import coil.request.ImageRequest
 import com.example.nava.R
 import com.example.nava.domain.auth.AuthSession
 import com.example.nava.domain.catalog.HomeTrack
+import com.example.nava.domain.catalog.SearchTrack
 import com.example.nava.domain.preferences.AppLanguage
 import com.example.nava.domain.preferences.FontScale
 import com.example.nava.domain.preferences.ThemeMode
 import com.example.nava.domain.preferences.UserPreferences
+import com.example.nava.ui.theme.NavaDimensions
+import com.example.nava.ui.theme.NavaBlack
 import com.example.nava.ui.theme.NavaSpacing
+import com.example.nava.ui.theme.NavaWhite
 import com.example.nava.ui.home.HomeUiState
 import com.example.nava.ui.home.HomeViewModel
 import com.example.nava.ui.search.SearchViewModel
@@ -116,6 +154,8 @@ import com.example.nava.ui.theme.NavaMotion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import java.text.DecimalFormat
+import kotlin.math.abs
 
 private data class NavItem(@StringRes val title: Int, val icon: ImageVector)
 
@@ -126,6 +166,31 @@ private val navigationItems = listOf(
     NavItem(R.string.playlists, Icons.Outlined.QueueMusic),
     NavItem(R.string.profile, Icons.Outlined.AccountCircle),
 )
+
+@Composable
+private fun NavaTopBarBrand() {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+    ) {
+        Surface(
+            modifier = Modifier.size(NavaDimensions.HomeTopBarLogoSize),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primary,
+        ) {
+            Image(
+                painter = painterResource(R.drawable.ic_launcher_foreground),
+                contentDescription = stringResource(R.string.auth_logo_content_description),
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        Text(
+            text = stringResource(R.string.top_bar_brand),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -143,13 +208,19 @@ fun NavaAppShell(
     val downloadViewModel: DownloadViewModel = hiltViewModel()
     val likesViewModel: LikesViewModel = hiltViewModel()
     val nowPlaying by playbackViewModel.nowPlaying.collectAsState()
+    val playbackSpeed by playbackViewModel.playbackSpeed.collectAsState()
+    val sleepTimerMinutes by playbackViewModel.sleepTimerMinutes.collectAsState()
+    val fftBands by playbackViewModel.fftBands.collectAsState()
     val playbackError by playbackViewModel.playbackError.collectAsState()
     val downloadState by downloadViewModel.state.collectAsState()
     val downloadError by downloadViewModel.downloadError.collectAsState()
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(if (settingsOpen) R.string.settings else R.string.top_bar_brand), style = MaterialTheme.typography.titleLarge) },
+                title = {
+                    if (settingsOpen) Text(stringResource(R.string.settings), style = MaterialTheme.typography.titleLarge)
+                    else NavaTopBarBrand()
+                },
                 actions = {
                     IconButton(onClick = {}) {
                         Icon(Icons.Outlined.NotificationsNone, contentDescription = stringResource(R.string.notification))
@@ -191,7 +262,15 @@ fun NavaAppShell(
                 onQueue = { queueCandidate = it },
                 onShuffleSource = playbackViewModel::setShuffleSource,
             )
-            selectedIndex == 1 -> SearchShell(modifier = Modifier.padding(padding))
+            selectedIndex == 1 -> SearchShell(
+                modifier = Modifier.padding(padding),
+                currentTrackId = nowPlaying?.track?.id,
+                onTrackClick = { track ->
+                    if (nowPlaying?.track?.id != track.id) playbackViewModel.play(track)
+                    playerExpanded = true
+                },
+                onTrackOptions = { queueCandidate = it },
+            )
             selectedIndex == 2 -> DownloadsShell(Modifier.padding(padding), downloadState, downloadViewModel)
             selectedIndex == 3 -> LibraryShell(modifier = Modifier.padding(padding), likesViewModel = likesViewModel)
             selectedIndex == 4 -> ProfileShell(session, Modifier.padding(padding), onDiscoverPeople = { socialOpen = true })
@@ -201,16 +280,19 @@ fun NavaAppShell(
     nowPlaying?.let { now ->
         AnimatedVisibility(
             visible = playerExpanded,
-            enter = fadeIn(tween(NavaMotion.Standard)) + scaleIn(tween(NavaMotion.Standard)),
-            exit = fadeOut(tween(NavaMotion.Fast)) + scaleOut(tween(NavaMotion.Fast)),
+            enter = fadeIn(tween(NavaMotion.Standard)) + slideInVertically(tween(NavaMotion.Standard)) { it },
+            exit = fadeOut(tween(NavaMotion.Fast)) + slideOutVertically(tween(NavaMotion.Standard)) { it },
         ) {
             FullPlayer(
                 nowPlaying = now,
+                playbackSpeed = playbackSpeed,
+                sleepTimerMinutes = sleepTimerMinutes,
+                fftBands = fftBands,
                 onDismiss = { playerExpanded = false },
                 onToggle = { if (now.playing) playbackViewModel.pause() else playbackViewModel.resume() },
                 onSeek = playbackViewModel::seekTo,
-                onSpeed = playbackViewModel::setSpeed,
-                onSleep = playbackViewModel::setSleepTimer,
+                onCycleSpeed = playbackViewModel::cycleSpeed,
+                onCycleSleepTimer = playbackViewModel::cycleSleepTimer,
                 onPrevious = playbackViewModel::skipToPrevious,
                 onNext = playbackViewModel::skipToNext,
             )
@@ -232,43 +314,94 @@ fun NavaAppShell(
         val isDownloading = track.id in downloadState.downloadingTrackIds
         val likes by likesViewModel.state.collectAsState()
         val isLiked = track.id in likes.likedIds
-        AlertDialog(
+        ModalBottomSheet(
             onDismissRequest = { queueCandidate = null },
-            title = { Text(stringResource(R.string.song_actions)) },
-            text = { Text("${track.title}\n${track.artistName}") },
-            confirmButton = {
-                Button(onClick = {
-                    playbackViewModel.addToQueue(track)
-                    queueCandidate = null
-                }) {
-                    Text(stringResource(R.string.add_to_queue))
-                }
-            },
-            dismissButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-                    Button(onClick = { likesViewModel.toggle(track) }) { Text(stringResource(if (isLiked) R.string.unlike_song else R.string.like_song)) }
-                    Button(
-                        enabled = !isDownloaded && !isDownloading,
-                        onClick = {
-                            downloadViewModel.request(track)
-                            selectedIndex = 2
-                            queueCandidate = null
-                        },
-                    ) {
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = NavaSpacing.Lg),
+                verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = NavaSpacing.Sm),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+                ) {
+                    AsyncImage(
+                        model = track.coverImageUrl,
+                        contentDescription = stringResource(R.string.track_artwork, track.title),
+                        contentScale = ContentScale.Crop,
+                        error = painterResource(R.drawable.ic_launcher_foreground),
+                        modifier = Modifier
+                            .size(NavaDimensions.SearchActionArtworkSize)
+                            .clip(MaterialTheme.shapes.medium)
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            stringResource(
-                                when {
-                                    isDownloaded -> R.string.downloaded
-                                    isDownloading -> R.string.downloading
-                                    else -> R.string.download
-                                },
-                            ),
+                            text = track.title,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = track.artistName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    Button(onClick = { queueCandidate = null }) { Text(stringResource(R.string.close)) }
                 }
-            },
-        )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                SongActionRow(
+                    icon = Icons.Outlined.PlayArrow,
+                    label = stringResource(R.string.play_now),
+                    onClick = {
+                        playbackViewModel.play(track)
+                        playerExpanded = true
+                        queueCandidate = null
+                    },
+                )
+                SongActionRow(
+                    icon = Icons.Outlined.QueueMusic,
+                    label = stringResource(R.string.add_to_queue),
+                    onClick = {
+                        playbackViewModel.addToQueue(track)
+                        queueCandidate = null
+                    },
+                )
+                SongActionRow(
+                    icon = if (isLiked) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
+                    label = stringResource(if (isLiked) R.string.unlike_song else R.string.like_song),
+                    onClick = {
+                        likesViewModel.toggle(track)
+                        queueCandidate = null
+                    },
+                )
+                SongActionRow(
+                    icon = Icons.Outlined.Download,
+                    label = stringResource(
+                        when {
+                            isDownloaded -> R.string.downloaded
+                            isDownloading -> R.string.downloading
+                            else -> R.string.download
+                        },
+                    ),
+                    enabled = !isDownloaded && !isDownloading,
+                    onClick = {
+                        downloadViewModel.request(track)
+                        selectedIndex = 2
+                        queueCandidate = null
+                    },
+                )
+                Spacer(Modifier.height(NavaSpacing.Lg))
+            }
+        }
     }
     downloadError?.let { error ->
         AlertDialog(
@@ -284,26 +417,92 @@ fun NavaAppShell(
 }
 
 @Composable
+private fun SongActionRow(
+    icon: ImageVector,
+    label: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            Surface(
+                modifier = Modifier.size(NavaDimensions.SearchActionIconSize),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(NavaSpacing.Sm),
+                )
+            }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Composable
 private fun MiniPlayer(nowPlaying: NowPlaying, onToggle: () -> Unit, onOpen: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth(), onClick = onOpen) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = NavaSpacing.Lg, vertical = NavaSpacing.Sm),
+        onClick = onOpen,
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        elevation = CardDefaults.cardElevation(defaultElevation = NavaSpacing.Xs),
+    ) {
         Row(modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Md), verticalAlignment = Alignment.CenterVertically) {
             AsyncImage(
                 model = nowPlaying.track.coverImageUrl,
                 contentDescription = stringResource(R.string.now_playing_artwork),
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .size(NavaSpacing.Xxl)
+                    .size(NavaDimensions.MiniPlayerArtworkSize)
                     .clip(MaterialTheme.shapes.medium),
             )
             Column(modifier = Modifier.weight(1f).padding(start = NavaSpacing.Sm)) {
-                Text(nowPlaying.track.title, style = MaterialTheme.typography.titleMedium)
-                Text(nowPlaying.track.artistName, style = MaterialTheme.typography.bodyMedium)
-            }
-            IconButton(onClick = onToggle) {
-                Icon(
-                    if (nowPlaying.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
-                    contentDescription = stringResource(if (nowPlaying.playing) R.string.pause_playback else R.string.resume_playback),
+                Text(
+                    nowPlaying.track.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
                 )
+                Text(
+                    nowPlaying.track.artistName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+            Surface(
+                onClick = onToggle,
+                modifier = Modifier.size(NavaDimensions.PlayerSecondaryControlSize),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        if (nowPlaying.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
+                        contentDescription = stringResource(if (nowPlaying.playing) R.string.pause_playback else R.string.resume_playback),
+                    )
+                }
             }
         }
     }
@@ -312,102 +511,297 @@ private fun MiniPlayer(nowPlaying: NowPlaying, onToggle: () -> Unit, onOpen: () 
 @Composable
 private fun FullPlayer(
     nowPlaying: NowPlaying,
+    playbackSpeed: Float,
+    sleepTimerMinutes: Long?,
+    fftBands: FloatArray,
     onDismiss: () -> Unit,
     onToggle: () -> Unit,
     onSeek: (Long) -> Unit,
-    onSpeed: (Float) -> Unit,
-    onSleep: (Long) -> Unit,
+    onCycleSpeed: () -> Unit,
+    onCycleSleepTimer: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
 ) {
-    val pulse by animateFloatAsState(targetValue = if (nowPlaying.playing) 1f else .35f, animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "visualizer")
+    BackHandler(onBack = onDismiss)
+    val fallbackPaletteColor = MaterialTheme.colorScheme.primary
+    var paletteColor by remember(nowPlaying.track.id) { mutableStateOf(fallbackPaletteColor) }
     var scrubPosition by rememberSaveable(nowPlaying.track.id) { mutableStateOf(nowPlaying.positionMs.toFloat()) }
     var scrubbing by rememberSaveable(nowPlaying.track.id) { mutableStateOf(false) }
+    var dragX by remember(nowPlaying.track.id) { mutableFloatStateOf(0f) }
+    var dragY by remember(nowPlaying.track.id) { mutableFloatStateOf(0f) }
+    val swipeThreshold = with(LocalDensity.current) { NavaDimensions.PlayerSwipeThreshold.toPx() }
+    val speedLabel = remember(playbackSpeed) { DecimalFormat("0.##").format(playbackSpeed) }
     LaunchedEffect(nowPlaying.positionMs, scrubbing) {
         if (!scrubbing) scrubPosition = nowPlaying.positionMs.toFloat()
     }
     val durationMs = nowPlaying.durationMs.coerceAtLeast(1L)
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(nowPlaying.track.title) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
-                Text(nowPlaying.track.artistName, style = MaterialTheme.typography.bodyLarge)
-                NowPlayingArtwork(nowPlaying)
-                Canvas(modifier = Modifier.fillMaxWidth().size(NavaSpacing.Xxl)) {
-                    val barWidth = size.width / 11f
-                    repeat(8) { index ->
-                        val height = size.height * (0.2f + ((index % 3) * .18f) + pulse * .22f)
-                        drawRect(Color(0xFFFCA311), topLeft = androidx.compose.ui.geometry.Offset(barWidth * (index + 1), size.height - height), size = androidx.compose.ui.geometry.Size(barWidth * .5f, height))
-                    }
-                }
-                Slider(
-                    value = scrubPosition.coerceIn(0f, durationMs.toFloat()),
-                    onValueChange = { value ->
-                        scrubbing = true
-                        scrubPosition = value
-                    },
-                    onValueChangeFinished = {
-                        onSeek(scrubPosition.toLong())
-                        scrubbing = false
-                    },
-                    valueRange = 0f..durationMs.toFloat(),
-                )
-                Text(
-                    stringResource(
-                        R.string.playback_position,
-                        playbackMinutes(scrubPosition.toLong()),
-                        playbackSeconds(scrubPosition.toLong()),
-                        playbackMinutes(durationMs),
-                        playbackSeconds(durationMs),
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            paletteColor.copy(alpha = .58f),
+                            MaterialTheme.colorScheme.background,
+                            MaterialTheme.colorScheme.background,
+                        ),
                     ),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically,
+                ),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .padding(horizontal = NavaSpacing.Xl),
+            ) {
+                PlayerHeader(onDismiss)
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(bottom = NavaSpacing.Md),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.SpaceEvenly,
                 ) {
-                    IconButton(onClick = onPrevious) {
-                        Icon(
-                            Icons.Outlined.SkipPrevious,
-                            contentDescription = stringResource(R.string.previous_track),
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .graphicsLayer {
+                                translationX = dragX * .45f
+                                translationY = dragY.coerceAtLeast(0f) * .35f
+                                rotationZ = (dragX / swipeThreshold).coerceIn(-1f, 1f) * 3f
+                                alpha = (1f - (abs(dragX) + dragY.coerceAtLeast(0f)) / (swipeThreshold * 5f))
+                                    .coerceIn(.72f, 1f)
+                            }
+                            .pointerInput(nowPlaying.track.id, swipeThreshold) {
+                                detectDragGestures(
+                                    onDragStart = {
+                                        dragX = 0f
+                                        dragY = 0f
+                                    },
+                                    onDragCancel = {
+                                        dragX = 0f
+                                        dragY = 0f
+                                    },
+                                    onDragEnd = {
+                                        when {
+                                            abs(dragX) > abs(dragY) && abs(dragX) >= swipeThreshold -> {
+                                                if (dragX > 0f) onPrevious() else onNext()
+                                            }
+                                            dragY >= swipeThreshold -> onDismiss()
+                                        }
+                                        dragX = 0f
+                                        dragY = 0f
+                                    },
+                                ) { change, dragAmount ->
+                                    change.consume()
+                                    dragX += dragAmount.x
+                                    dragY += dragAmount.y
+                                }
+                            },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs),
+                    ) {
+                        Text(
+                            text = nowPlaying.track.title,
+                            modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            textAlign = TextAlign.Center,
+                        )
+                        Text(
+                            text = nowPlaying.track.artistName,
+                            modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                        Spacer(Modifier.height(NavaSpacing.Sm))
+                        NowPlayingArtwork(
+                            nowPlaying = nowPlaying,
+                            onPaletteColorChanged = { paletteColor = it },
+                        )
+                        Text(
+                            text = stringResource(R.string.player_swipe_hint),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    IconButton(onClick = onToggle) {
-                        Icon(
-                            if (nowPlaying.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
-                            contentDescription = stringResource(
-                                if (nowPlaying.playing) R.string.pause_playback else R.string.resume_playback,
+                    EqualizerVisualizer(bands = fftBands, isPlaying = nowPlaying.playing)
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Slider(
+                            value = scrubPosition.coerceIn(0f, durationMs.toFloat()),
+                            onValueChange = { value ->
+                                scrubbing = true
+                                scrubPosition = value
+                            },
+                            onValueChangeFinished = {
+                                onSeek(scrubPosition.toLong())
+                                scrubbing = false
+                            },
+                            valueRange = 0f..durationMs.toFloat(),
+                        )
+                        Text(
+                            text = stringResource(
+                                R.string.playback_position,
+                                playbackMinutes(scrubPosition.toLong()),
+                                playbackSeconds(scrubPosition.toLong()),
+                                playbackMinutes(durationMs),
+                                playbackSeconds(durationMs),
                             ),
+                            modifier = Modifier.align(Alignment.End),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    IconButton(onClick = onNext) {
-                        Icon(
-                            Icons.Outlined.SkipNext,
-                            contentDescription = stringResource(R.string.next_track),
+                    PlayerTransportControls(
+                        playing = nowPlaying.playing,
+                        onPrevious = onPrevious,
+                        onToggle = onToggle,
+                        onNext = onNext,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+                    ) {
+                        PlayerUtilityButton(
+                            icon = Icons.Outlined.Speed,
+                            label = stringResource(R.string.playback_speed_value, speedLabel),
+                            onClick = onCycleSpeed,
+                            modifier = Modifier.weight(1f),
+                        )
+                        PlayerUtilityButton(
+                            icon = Icons.Outlined.Timer,
+                            label = sleepTimerMinutes?.let { stringResource(R.string.sleep_timer_minutes, it) }
+                                ?: stringResource(R.string.sleep_timer_off),
+                            onClick = onCycleSleepTimer,
+                            modifier = Modifier.weight(1f),
                         )
                     }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-                    AssistChip(onClick = { onSpeed(0.75f) }, label = { Text("0.75×") })
-                    AssistChip(onClick = { onSpeed(1f) }, label = { Text("1×") })
-                    AssistChip(onClick = { onSpeed(1.25f) }, label = { Text("1.25×") })
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-                    AssistChip(onClick = { onSpeed(1.5f) }, label = { Text("1.5×") })
-                    AssistChip(onClick = { onSpeed(2f) }, label = { Text("2×") })
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-                    AssistChip(onClick = { onSleep(15) }, label = { Text(stringResource(R.string.sleep_15)) })
-                    AssistChip(onClick = { onSleep(30) }, label = { Text(stringResource(R.string.sleep_30)) })
                 }
             }
-        },
-        confirmButton = {
-            Button(onClick = onDismiss) { Text(stringResource(R.string.close)) }
-        },
-    )
+        }
+    }
+}
+
+@Composable
+private fun PlayerHeader(onDismiss: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().height(NavaDimensions.PlayerSecondaryControlSize),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onDismiss, modifier = Modifier.size(NavaDimensions.PlayerSecondaryControlSize)) {
+            Icon(
+                Icons.Outlined.KeyboardArrowDown,
+                contentDescription = stringResource(R.string.collapse_player),
+                modifier = Modifier.size(NavaSpacing.Xxl),
+            )
+        }
+        Text(
+            text = stringResource(R.string.now_playing),
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.size(NavaDimensions.PlayerSecondaryControlSize))
+    }
+}
+
+@Composable
+private fun PlayerTransportControls(
+    playing: Boolean,
+    onPrevious: () -> Unit,
+    onToggle: () -> Unit,
+    onNext: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PlayerControlButton(Icons.Outlined.SkipPrevious, R.string.previous_track, onPrevious)
+        PlayerControlButton(
+            icon = if (playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
+            contentDescription = if (playing) R.string.pause_playback else R.string.resume_playback,
+            onClick = onToggle,
+            primary = true,
+        )
+        PlayerControlButton(Icons.Outlined.SkipNext, R.string.next_track, onNext)
+    }
+}
+
+@Composable
+private fun PlayerControlButton(
+    icon: ImageVector,
+    @StringRes contentDescription: Int,
+    onClick: () -> Unit,
+    primary: Boolean = false,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.size(if (primary) NavaDimensions.PlayerPrimaryControlSize else NavaDimensions.PlayerSecondaryControlSize),
+        shape = CircleShape,
+        color = if (primary) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = if (primary) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                icon,
+                contentDescription = stringResource(contentDescription),
+                modifier = Modifier.size(if (primary) NavaSpacing.Xxl else NavaSpacing.Xl),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlayerUtilityButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(NavaDimensions.PlayerUtilityControlHeight),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = NavaSpacing.Md),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(NavaSpacing.Xl))
+            Spacer(Modifier.size(NavaSpacing.Sm))
+            Text(label, style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+@Composable
+private fun EqualizerVisualizer(bands: FloatArray, isPlaying: Boolean) {
+    val barColor = MaterialTheme.colorScheme.primary
+    Canvas(modifier = Modifier.fillMaxWidth().height(NavaDimensions.PlayerVisualizerHeight)) {
+        val barCount = bands.size.coerceAtLeast(1)
+        val slotWidth = size.width / barCount
+        val barWidth = slotWidth * .46f
+        repeat(barCount) { index ->
+            val spectrumLevel = bands.getOrElse(index) { 0f }.coerceIn(0f, 1f)
+            val level = if (isPlaying) .08f + spectrumLevel * .9f else .08f
+            val barHeight = size.height * level
+            drawRoundRect(
+                color = barColor,
+                topLeft = Offset(slotWidth * index + (slotWidth - barWidth) / 2f, (size.height - barHeight) / 2f),
+                size = Size(barWidth, barHeight),
+                cornerRadius = CornerRadius(barWidth / 2f),
+            )
+        }
+    }
 }
 
 private fun playbackMinutes(timeMs: Long): Long = timeMs / 60_000L
@@ -415,10 +809,12 @@ private fun playbackMinutes(timeMs: Long): Long = timeMs / 60_000L
 private fun playbackSeconds(timeMs: Long): Long = (timeMs / 1_000L) % 60L
 
 @Composable
-private fun NowPlayingArtwork(nowPlaying: NowPlaying) {
+private fun NowPlayingArtwork(
+    nowPlaying: NowPlaying,
+    onPaletteColorChanged: (Color) -> Unit,
+) {
     val fallbackPaletteColor = MaterialTheme.colorScheme.primary
     var bitmap by remember(nowPlaying.track.coverImageUrl) { mutableStateOf<Bitmap?>(null) }
-    var paletteColor by remember(nowPlaying.track.coverImageUrl) { mutableStateOf(fallbackPaletteColor) }
     val coverRotation = remember(nowPlaying.track.id) { Animatable(0f) }
     LaunchedEffect(nowPlaying.track.id, nowPlaying.playing) {
         if (!nowPlaying.playing) {
@@ -434,20 +830,25 @@ private fun NowPlayingArtwork(nowPlaying: NowPlaying) {
     }
     LaunchedEffect(bitmap) {
         bitmap?.let { cover ->
-            paletteColor = withContext(Dispatchers.Default) {
-                // Coil may decode artwork as a hardware bitmap. Palette reads pixels directly,
-                // so give it a software copy before generating the player gradient.
+            val paletteColor = withContext(Dispatchers.Default) {
                 val softwareBitmap = cover.copy(Bitmap.Config.ARGB_8888, false)
-                Color(Palette.from(softwareBitmap).generate().getVibrantColor(paletteColor.toArgb()))
+                Color(Palette.from(softwareBitmap).generate().getVibrantColor(fallbackPaletteColor.toArgb()))
             }
+            onPaletteColorChanged(paletteColor)
         }
     }
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .widthIn(max = NavaDimensions.PlayerArtworkMaxSize)
             .aspectRatio(1f)
             .clip(CircleShape)
-            .background(Brush.verticalGradient(listOf(paletteColor, MaterialTheme.colorScheme.surface))),
+            .border(
+                NavaDimensions.PlayerArtworkBorderWidth,
+                MaterialTheme.colorScheme.onBackground.copy(alpha = .18f),
+                CircleShape,
+            )
+            .padding(NavaSpacing.Sm),
         contentAlignment = Alignment.Center,
     ) {
         AsyncImage(
@@ -461,6 +862,17 @@ private fun NowPlayingArtwork(nowPlaying: NowPlaying) {
             onSuccess = { result ->
                 bitmap = (result.result.drawable as? BitmapDrawable)?.bitmap
             },
+        )
+        Box(
+            modifier = Modifier
+                .size(NavaSpacing.Xxl)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = .9f))
+                .border(
+                    NavaDimensions.PlayerArtworkBorderWidth,
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = .25f),
+                    CircleShape,
+                ),
         )
     }
 }
@@ -483,26 +895,269 @@ private fun NowPlayingArtwork(nowPlaying: NowPlaying) {
 }
 
 @Composable
-private fun SearchShell(modifier: Modifier, viewModel: SearchViewModel = hiltViewModel()) {
+private fun SearchShell(
+    modifier: Modifier,
+    currentTrackId: String?,
+    onTrackClick: (HomeTrack) -> Unit,
+    onTrackOptions: (HomeTrack) -> Unit,
+    viewModel: SearchViewModel = hiltViewModel(),
+) {
     val state by viewModel.state.collectAsState()
-    Column(modifier = modifier.fillMaxSize().padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
-        OutlinedTextField(value = state.query, onValueChange = viewModel::updateQuery, label = { Text(stringResource(R.string.search_catalog)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-            AssistChip(onClick = { viewModel.setLanguage(null) }, label = { Text(stringResource(R.string.filter_all)) })
-            AssistChip(onClick = { viewModel.setLanguage("en") }, label = { Text(stringResource(R.string.filter_english)) })
-            AssistChip(onClick = { viewModel.setLanguage("fa") }, label = { Text(stringResource(R.string.filter_persian)) })
+    val focusManager = LocalFocusManager.current
+    Column(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.padding(horizontal = NavaSpacing.Lg, vertical = NavaSpacing.Md),
+            verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+        ) {
+            Text(
+                text = stringResource(R.string.search_title),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = stringResource(R.string.search_subtitle),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedTextField(
+                value = state.query,
+                onValueChange = viewModel::updateQuery,
+                placeholder = { Text(stringResource(R.string.search_catalog)) },
+                leadingIcon = { Icon(Icons.Outlined.ManageSearch, contentDescription = null) },
+                trailingIcon = {
+                    if (state.query.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.updateQuery("") }) {
+                            Icon(Icons.Outlined.Clear, contentDescription = stringResource(R.string.clear_search))
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = MaterialTheme.shapes.large,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                SearchFilterChip(
+                    selected = state.language == null,
+                    label = R.string.filter_all,
+                    onClick = { viewModel.setLanguage(null) },
+                )
+                SearchFilterChip(
+                    selected = state.language == "en",
+                    label = R.string.filter_english,
+                    onClick = { viewModel.setLanguage("en") },
+                )
+                SearchFilterChip(
+                    selected = state.language == "fa",
+                    label = R.string.filter_persian,
+                    onClick = { viewModel.setLanguage("fa") },
+                )
+            }
         }
         when {
-            state.loading -> CircularProgressIndicator()
-            state.failed -> Text(stringResource(R.string.search_error))
-            state.query.isNotBlank() && state.results.isEmpty() -> Text(stringResource(R.string.search_empty))
-            else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-                items(state.results, key = { it.id }) { track -> Card { Column(Modifier.padding(NavaSpacing.Md)) { Text(track.title, style = MaterialTheme.typography.titleMedium); Text(track.artistName, style = MaterialTheme.typography.bodyMedium) } } }
-                if (state.canLoadMore) item { LaunchedEffect(state.results.size) { viewModel.loadMore() }; CircularProgressIndicator() }
+            state.query.isBlank() -> SearchMessage(
+                title = stringResource(R.string.search_start_title),
+                body = stringResource(R.string.search_start_subtitle),
+            )
+            state.loading && state.results.isEmpty() -> Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) { CircularProgressIndicator() }
+            state.failed -> SearchMessage(
+                title = stringResource(R.string.search_error),
+                body = stringResource(R.string.search_error_hint),
+                action = { Button(onClick = viewModel::retry) { Text(stringResource(R.string.retry)) } },
+            )
+            state.results.isEmpty() -> SearchMessage(
+                title = stringResource(R.string.search_empty),
+                body = stringResource(R.string.search_empty_hint),
+            )
+            else -> LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    start = NavaSpacing.Lg,
+                    end = NavaSpacing.Lg,
+                    top = NavaSpacing.Xs,
+                    bottom = NavaSpacing.Xl,
+                ),
+                verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+            ) {
+                item {
+                    Text(
+                        text = stringResource(R.string.search_results_count, state.results.size),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = NavaSpacing.Xs),
+                    )
+                }
+                if (state.loading) item { LinearProgressIndicator(modifier = Modifier.fillMaxWidth()) }
+                items(state.results, key = SearchTrack::id) { track ->
+                    SearchTrackRow(
+                        track = track,
+                        isCurrent = track.id == currentTrackId,
+                        onClick = {
+                            focusManager.clearFocus()
+                            onTrackClick(track.toHomeTrack())
+                        },
+                        onOptions = {
+                            focusManager.clearFocus()
+                            onTrackOptions(track.toHomeTrack())
+                        },
+                    )
+                }
+                if (state.canLoadMore) item {
+                    LaunchedEffect(state.results.size) { viewModel.loadMore() }
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Md),
+                        contentAlignment = Alignment.Center,
+                    ) { CircularProgressIndicator() }
+                }
             }
         }
     }
 }
+
+@Composable
+private fun SearchFilterChip(selected: Boolean, @StringRes label: Int, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = {
+            Text(
+                text = stringResource(label),
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            )
+        },
+    )
+}
+
+@Composable
+private fun SearchMessage(
+    title: String,
+    body: String,
+    action: (@Composable () -> Unit)? = null,
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(NavaSpacing.Xl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Surface(
+            modifier = Modifier.size(NavaDimensions.SearchEmptyIconSize),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primaryContainer,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Outlined.ManageSearch,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(NavaDimensions.SearchEmptyGlyphSize),
+                )
+            }
+        }
+        Spacer(Modifier.height(NavaSpacing.Lg))
+        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(NavaSpacing.Xs))
+        Text(
+            body,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        action?.let {
+            Spacer(Modifier.height(NavaSpacing.Lg))
+            it()
+        }
+    }
+}
+
+@Composable
+private fun SearchTrackRow(
+    track: SearchTrack,
+    isCurrent: Boolean,
+    onClick: () -> Unit,
+    onOptions: () -> Unit,
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = NavaSpacing.Xs),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            Box {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(track.coverImageUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = stringResource(R.string.track_artwork, track.title),
+                    contentScale = ContentScale.Crop,
+                    error = painterResource(R.drawable.ic_launcher_foreground),
+                    modifier = Modifier
+                        .size(NavaDimensions.SearchTrackArtworkSize)
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                )
+                Surface(
+                    modifier = Modifier.align(Alignment.BottomEnd).size(NavaDimensions.SearchPlayBadgeSize),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary,
+                    shadowElevation = NavaSpacing.Xs,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.PlayArrow,
+                        contentDescription = stringResource(R.string.play_track, track.title),
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.padding(NavaSpacing.Xs),
+                    )
+                }
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
+                Text(
+                    text = track.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = track.artistName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "${track.genre} • ${formatTrackDuration(track.durationSeconds)}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (isCurrent) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+            IconButton(onClick = onOptions) {
+                Icon(
+                    imageVector = Icons.Outlined.MoreVert,
+                    contentDescription = stringResource(R.string.track_more_options, track.title),
+                )
+            }
+        }
+    }
+}
+
+private fun formatTrackDuration(durationSeconds: Int): String =
+    "${durationSeconds / 60}:${(durationSeconds % 60).toString().padStart(2, '0')}"
 
 @Composable
 private fun HomeShell(
@@ -525,7 +1180,23 @@ private fun HomeShell(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xl),
     ) {
-        item { Text(stringResource(R.string.home_welcome), modifier = Modifier.padding(horizontal = NavaSpacing.Lg), style = MaterialTheme.typography.headlineSmall) }
+        item {
+            Column(
+                modifier = Modifier.padding(horizontal = NavaSpacing.Lg),
+                verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs),
+            ) {
+                Text(
+                    stringResource(R.string.home_welcome),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    stringResource(R.string.home_welcome_subtitle),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         when (val current = state) {
             HomeUiState.Loading -> item { HomeLoading() }
             HomeUiState.Error -> item { HomeError(onRetry = viewModel::reload) }
@@ -540,6 +1211,14 @@ private fun androidx.compose.foundation.lazy.LazyListScope.homeContent(
     onQueue: (HomeTrack) -> Unit,
 ) {
     item {
+        Text(
+            text = stringResource(R.string.home_featured),
+            modifier = Modifier.padding(horizontal = NavaSpacing.Lg),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
+    }
+    item {
         LazyRow(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NavaSpacing.Lg),
             horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
@@ -550,12 +1229,12 @@ private fun androidx.compose.foundation.lazy.LazyListScope.homeContent(
     item {
         LazyRow(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NavaSpacing.Lg),
-            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
         ) {
-            item { QuickAction(R.string.quick_liked) }
-            item { QuickAction(R.string.quick_recent) }
-            item { QuickAction(R.string.quick_playlists) }
-            item { QuickAction(R.string.quick_artists) }
+            item { QuickAction(R.string.quick_liked, Icons.Outlined.FavoriteBorder) }
+            item { QuickAction(R.string.quick_recent, Icons.Outlined.History) }
+            item { QuickAction(R.string.quick_playlists, Icons.Outlined.QueueMusic) }
+            item { QuickAction(R.string.quick_artists, Icons.Outlined.Groups) }
         }
     }
     item { DiscoverySection(R.string.home_trending, state.feed.trending, onPlay, onQueue) }
@@ -631,13 +1310,48 @@ private fun FeaturedCard(
 ) {
     Card(
         modifier = Modifier
-            .fillMaxWidth()
+            .width(NavaDimensions.HomeFeaturedCardWidth)
+            .height(NavaDimensions.HomeFeaturedCardHeight)
             .combinedClickable(onClick = { onPlay(track) }, onLongClick = { onQueue(track) }),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = MaterialTheme.shapes.large,
+        elevation = CardDefaults.cardElevation(defaultElevation = NavaSpacing.Xs),
     ) {
-        Column(modifier = Modifier.padding(NavaSpacing.Xl), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-            Text(track.title, style = MaterialTheme.typography.titleLarge)
-            Text(track.artistName, style = MaterialTheme.typography.bodyMedium)
+        Box(modifier = Modifier.fillMaxSize()) {
+            AsyncImage(
+                model = track.coverImageUrl,
+                contentDescription = stringResource(R.string.track_artwork, track.title),
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, NavaBlack.copy(alpha = .9f)),
+                        ),
+                    ),
+            )
+            Surface(
+                modifier = Modifier.align(Alignment.TopStart).padding(NavaSpacing.Md),
+                shape = MaterialTheme.shapes.small,
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ) {
+                Text(
+                    stringResource(R.string.featured_badge),
+                    modifier = Modifier.padding(horizontal = NavaSpacing.Md, vertical = NavaSpacing.Xs),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+            Column(
+                modifier = Modifier.align(Alignment.BottomStart).padding(NavaSpacing.Lg),
+                verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs),
+            ) {
+                Text(track.title, style = MaterialTheme.typography.titleLarge, color = NavaWhite, fontWeight = FontWeight.Bold)
+                Text(track.artistName, style = MaterialTheme.typography.bodyMedium, color = NavaWhite.copy(alpha = .82f))
+                Text(stringResource(R.string.home_carousel_caption), style = MaterialTheme.typography.labelMedium, color = NavaWhite.copy(alpha = .7f))
+            }
         }
     }
 }
@@ -650,22 +1364,48 @@ private fun DiscoverySection(
     onQueue: (HomeTrack) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
-        Text(stringResource(title), modifier = Modifier.padding(horizontal = NavaSpacing.Lg), style = MaterialTheme.typography.titleLarge)
+        Text(
+            stringResource(title),
+            modifier = Modifier.padding(horizontal = NavaSpacing.Lg),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+        )
         LazyRow(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NavaSpacing.Lg),
             horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
         ) {
             items(tracks, key = HomeTrack::id) { track ->
                 Card(
-                    modifier = Modifier.combinedClickable(
-                        onClick = { onPlay(track) },
-                        onLongClick = { onQueue(track) },
-                    ),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    modifier = Modifier
+                        .width(NavaDimensions.HomeTrackCardWidth)
+                        .combinedClickable(
+                            onClick = { onPlay(track) },
+                            onLongClick = { onQueue(track) },
+                        ),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+                    shape = MaterialTheme.shapes.large,
                 ) {
-                    Column(modifier = Modifier.padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-                        Text(track.title, style = MaterialTheme.typography.titleMedium)
-                        Text(track.artistName, style = MaterialTheme.typography.bodyMedium)
+                    Column {
+                        AsyncImage(
+                            model = track.coverImageUrl,
+                            contentDescription = stringResource(R.string.track_artwork, track.title),
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(NavaDimensions.HomeTrackArtworkHeight),
+                        )
+                        Column(
+                            modifier = Modifier.padding(NavaSpacing.Md),
+                            verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs),
+                        ) {
+                            Text(track.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1)
+                            Text(
+                                track.artistName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
             }
@@ -674,8 +1414,39 @@ private fun DiscoverySection(
 }
 
 @Composable
-private fun QuickAction(@StringRes label: Int) {
-    AssistChip(onClick = {}, label = { Text(stringResource(label)) })
+private fun QuickAction(@StringRes label: Int, icon: ImageVector) {
+    Surface(
+        onClick = {},
+        modifier = Modifier
+            .width(NavaDimensions.HomeQuickActionWidth)
+            .height(NavaDimensions.HomeQuickActionHeight),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize().padding(NavaSpacing.Md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            Surface(
+                modifier = Modifier.size(NavaDimensions.HomeTopBarLogoSize),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, contentDescription = null, modifier = Modifier.size(NavaSpacing.Xl))
+                }
+            }
+            Text(
+                text = stringResource(label),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+            )
+        }
+    }
 }
 
 @Composable

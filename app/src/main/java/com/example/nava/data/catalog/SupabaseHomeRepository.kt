@@ -49,7 +49,7 @@ private data class HomeTrackDto(
     )
 }
 
-private fun String.toPublicCoverUrl(supabase: SupabaseClient): String =
+internal fun String.toPublicCoverUrl(supabase: SupabaseClient): String =
     takeIf { it.startsWith(COVER_STORAGE_PREFIX) }
         ?.removePrefix(COVER_STORAGE_PREFIX)
         ?.let { path -> supabase.storage.from(COVERS_BUCKET).publicUrl(path) }

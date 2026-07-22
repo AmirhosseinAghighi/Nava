@@ -12,4 +12,12 @@ class AuthValidatorTest {
     @Test fun rejects_invalid_credentials() {
         assertFalse(AuthValidator.isValid("listener", "short"))
     }
+
+    @Test fun accepts_valid_registration() {
+        assertTrue(AuthValidator.isValidRegistration("Nava Listener", "listener@nava.app", "secret1"))
+    }
+
+    @Test fun rejects_registration_without_display_name() {
+        assertFalse(AuthValidator.isValidRegistration(" ", "listener@nava.app", "secret1"))
+    }
 }

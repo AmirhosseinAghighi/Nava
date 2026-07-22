@@ -9,6 +9,8 @@ import io.github.jan.supabase.auth.providers.builtin.Email
 import io.github.jan.supabase.auth.status.SessionStatus
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,11 +34,14 @@ class SupabaseAuthRepository @Inject constructor(
         }
     }
 
-    override suspend fun signUp(email: String, password: String): Result<Unit> = runCatching {
-        require(AuthValidator.isValid(email, password))
+    override suspend fun signUp(displayName: String, email: String, password: String): Result<Unit> = runCatching {
+        require(AuthValidator.isValidRegistration(displayName, email, password))
         supabase.auth.signUpWith(Email, redirectUrl = NavaAuthRedirect.Url) {
             this.email = email.trim()
             this.password = password
+            data = buildJsonObject {
+                put("display_name", displayName.trim())
+            }
         }
     }
 

@@ -19,6 +19,34 @@ object NavaMotion {
     const val Slow = 320
 }
 
+object NavaDimensions {
+    val AuthLogoSize = 104.dp
+    val AuthContentMaxWidth = 520.dp
+    val AuthButtonMinHeight = 52.dp
+    val AuthProgressStrokeWidth = 2.dp
+    val PlayerArtworkMaxSize = 300.dp
+    val PlayerPrimaryControlSize = 76.dp
+    val PlayerSecondaryControlSize = 56.dp
+    val PlayerUtilityControlHeight = 52.dp
+    val PlayerVisualizerHeight = 48.dp
+    val PlayerSwipeThreshold = 88.dp
+    val PlayerArtworkBorderWidth = 2.dp
+    val HomeTopBarLogoSize = 40.dp
+    val HomeFeaturedCardWidth = 286.dp
+    val HomeFeaturedCardHeight = 190.dp
+    val HomeTrackCardWidth = 172.dp
+    val HomeTrackArtworkHeight = 112.dp
+    val HomeQuickActionWidth = 154.dp
+    val HomeQuickActionHeight = 72.dp
+    val MiniPlayerArtworkSize = 48.dp
+    val SearchTrackArtworkSize = 72.dp
+    val SearchPlayBadgeSize = 28.dp
+    val SearchEmptyIconSize = 88.dp
+    val SearchEmptyGlyphSize = 40.dp
+    val SearchActionArtworkSize = 64.dp
+    val SearchActionIconSize = 44.dp
+}
+
 val NavaShapes = Shapes(
     small = RoundedCornerShape(8.dp),
     medium = RoundedCornerShape(12.dp),
