@@ -42,6 +42,7 @@
     <string name="search_empty_hint">Try another spelling, artist, or language filter.</string>
     <string name="filter_all">All</string><string name="filter_english">English</string><string name="filter_persian">Persian</string>
     <string name="search_error">Search is unavailable. Try again.</string><string name="search_empty">No matching music found.</string>
+    <string name="catalog_empty">The catalog is empty. Add tracks in Supabase, then retry.</string>
     <string name="downloads">Downloads</string>
     <string name="download">Download</string>
     <string name="downloading">Downloading</string>
@@ -110,6 +111,8 @@
     <string name="song_actions">Song actions</string>
     <string name="play_now">Play now</string>
     <string name="add_to_queue">Add to queue</string>
+    <string name="track_card_description">%1$s by %2$s. Double tap to play.</string>
+    <string name="queue_track_accessibility">Add %1$s to queue</string>
     <string name="quick_liked">Liked songs</string>
     <string name="quick_recent">Recently played</string>
     <string name="quick_playlists">My playlists</string>

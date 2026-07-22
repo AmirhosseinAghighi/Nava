@@ -42,6 +42,7 @@
     <string name="search_empty_hint">املای دیگری، هنرمند یا فیلتر زبان متفاوتی را امتحان کنید.</string>
     <string name="filter_all">همه</string><string name="filter_english">انگلیسی</string><string name="filter_persian">فارسی</string>
     <string name="search_error">جستجو در دسترس نیست. دوباره تلاش کنید.</string><string name="search_empty">موسیقی مطابقی پیدا نشد.</string>
+    <string name="catalog_empty">کاتالوگ خالی است. آهنگ‌ها را در Supabase اضافه کنید و دوباره تلاش کنید.</string>
     <string name="downloads">دانلودها</string>
     <string name="download">دانلود</string>
     <string name="downloading">در حال دانلود</string>
@@ -110,6 +111,8 @@
     <string name="song_actions">عملیات آهنگ</string>
     <string name="play_now">پخش اکنون</string>
     <string name="add_to_queue">افزودن به صف پخش</string>
+    <string name="track_card_description">%1$s از %2$s. برای پخش دوبار ضربه بزنید.</string>
+    <string name="queue_track_accessibility">افزودن %1$s به صف پخش</string>
     <string name="quick_liked">آهنگ‌های پسندیده</string>
     <string name="quick_recent">اخیراً پخش‌شده</string>
     <string name="quick_playlists">پلی‌لیست‌های من</string>

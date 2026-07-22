@@ -1,16 +1,20 @@
 package com.example.nava.playback
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Bundle
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import androidx.core.content.ContextCompat
 import androidx.core.app.NotificationCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -42,7 +46,7 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import java.io.File
 
-@UnstableApi
+@androidx.annotation.OptIn(UnstableApi::class)
 class NavaPlaybackService : MediaSessionService() {
     private lateinit var player: ExoPlayer
     private lateinit var cache: SimpleCache
@@ -205,6 +209,7 @@ class NavaPlaybackService : MediaSessionService() {
         super.onDestroy()
     }
 
+    @SuppressLint("MissingPermission")
     private fun startPlaybackForeground(title: String?) {
         val notificationManager = getSystemService(NotificationManager::class.java)
         notificationManager.createNotificationChannel(
@@ -229,8 +234,15 @@ class NavaPlaybackService : MediaSessionService() {
 
     private fun updatePlaybackNotification() {
         if (!::player.isInitialized) return
+        if (!canPostNotifications()) return
         getSystemService(NotificationManager::class.java)
             .notify(PLAYBACK_NOTIFICATION_ID, buildPlaybackNotification())
+    }
+
+    private fun canPostNotifications(): Boolean {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
     }
 
     private fun buildPlaybackNotification() = NotificationCompat.Builder(this, PLAYBACK_CHANNEL_ID)

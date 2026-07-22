@@ -121,6 +121,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
@@ -1213,6 +1218,22 @@ private fun androidx.compose.foundation.lazy.LazyListScope.homeContent(
     onPlay: (HomeTrack) -> Unit,
     onQueue: (HomeTrack) -> Unit,
 ) {
+    if (
+        state.feed.featured.isEmpty() &&
+        state.feed.trending.isEmpty() &&
+        state.feed.newest.isEmpty() &&
+        state.feed.global.isEmpty() &&
+        state.feed.local.isEmpty()
+    ) {
+        item {
+            Text(
+                stringResource(R.string.catalog_empty),
+                modifier = Modifier.padding(horizontal = NavaSpacing.Lg),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+        }
+        return
+    }
     item {
         Text(
             text = stringResource(R.string.home_featured),
@@ -1311,10 +1332,20 @@ private fun FeaturedCard(
     onPlay: (HomeTrack) -> Unit,
     onQueue: (HomeTrack) -> Unit,
 ) {
+    val description = stringResource(R.string.track_card_description, track.title, track.artistName)
+    val queueLabel = stringResource(R.string.queue_track_accessibility, track.title)
     Card(
         modifier = Modifier
             .width(NavaDimensions.HomeFeaturedCardWidth)
             .height(NavaDimensions.HomeFeaturedCardHeight)
+            .semantics {
+                contentDescription = description
+                role = Role.Button
+                onLongClick(label = queueLabel) {
+                    onQueue(track)
+                    true
+                }
+            }
             .combinedClickable(onClick = { onPlay(track) }, onLongClick = { onQueue(track) }),
         shape = MaterialTheme.shapes.large,
         elevation = CardDefaults.cardElevation(defaultElevation = NavaSpacing.Xs),
@@ -1378,9 +1409,19 @@ private fun DiscoverySection(
             horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
         ) {
             items(tracks, key = HomeTrack::id) { track ->
+                val description = stringResource(R.string.track_card_description, track.title, track.artistName)
+                val queueLabel = stringResource(R.string.queue_track_accessibility, track.title)
                 Card(
                     modifier = Modifier
                         .width(NavaDimensions.HomeTrackCardWidth)
+                        .semantics {
+                            contentDescription = description
+                            role = Role.Button
+                            onLongClick(label = queueLabel) {
+                                onQueue(track)
+                                true
+                            }
+                        }
                         .combinedClickable(
                             onClick = { onPlay(track) },
                             onLongClick = { onQueue(track) },

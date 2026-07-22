@@ -1,7 +1,10 @@
 package com.example.nava
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.content.Intent
+import android.os.Build
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -22,6 +25,8 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.core.os.LocaleListCompat
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.example.nava.domain.preferences.AppLanguage
 import com.example.nava.domain.preferences.FontScale
 import com.example.nava.domain.preferences.ThemeMode
@@ -44,6 +49,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         supabase.handleDeeplinks(intent)
+        requestNotificationsPermissionIfNeeded()
         enableEdgeToEdge()
         setContent { NavaRoot() }
     }
@@ -52,6 +58,25 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         supabase.handleDeeplinks(intent)
+    }
+
+    private fun requestNotificationsPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            REQUEST_NOTIFICATIONS_PERMISSION,
+        )
+    }
+
+    companion object {
+        private const val REQUEST_NOTIFICATIONS_PERMISSION = 1001
     }
 }
 
