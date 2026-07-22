@@ -65,6 +65,12 @@
     <string name="language_english">English</string>
     <string name="language_persian">Persian</string>
     <string name="sign_out">Sign out</string>
+    <string name="sign_out_subtitle">Securely leave this account on this device.</string>
+    <string name="sign_out_confirm_title">Sign out of Nava?</string>
+    <string name="sign_out_confirm_message">You will need to sign in again to access your profile, chats, and downloads.</string>
+    <string name="cancel">Cancel</string>
+    <string name="settings_title">Make Nava yours</string>
+    <string name="settings_subtitle">Choose how the app looks, reads, and feels.</string>
     <string name="premium">Premium</string>
     <string name="upgrade_demo">Enable Premium demo</string>
     <string name="premium_download_required">Offline downloads are a Premium feature. Upgrade your account to download music.</string>
@@ -81,6 +87,8 @@
     <string name="edit_profile_photo">Choose a new profile photo</string>
     <string name="confirm_profile_changes">Confirm profile changes</string>
     <string name="profile_changes_hint">Edit your name, then tap the check beside your photo to apply changes.</string>
+    <string name="edit_profile">Edit profile</string>
+    <string name="cancel_editing">Cancel editing</string>
     <string name="premium_member">Premium member</string>
     <string name="standard_member">Standard member</string>
     <string name="font_size">Font size</string>
@@ -160,10 +168,19 @@
     <string name="message_hint">Write a message</string>
     <string name="send_message">Send message</string>
     <string name="share_now_playing">Share now playing</string>
+    <string name="share_track">Share track</string>
+    <string name="choose_share_recipient">Choose a conversation</string>
+    <string name="share_no_conversations">Start a conversation first, then you can share music directly with that listener.</string>
+    <string name="tap_to_share">Tap to send this track</string>
+    <string name="share_with">Share with %1$s</string>
     <string name="shared_music">Shared music</string>
     <string name="play_shared_track">Play shared track</string>
     <string name="message_sent">Sent</string>
     <string name="message_delivered">Delivered</string>
     <string name="message_read">Read</string>
+    <string name="message_sending">Sending</string>
+    <string name="message_failed">Message failed</string>
     <string name="typing">%1$s is typing…</string>
+    <string name="tap_to_play_track">Tap to play in Nava</string>
+    <string name="chat_offline_history">Offline history — reconnect for new messages.</string>
 </resources>

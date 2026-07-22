@@ -65,6 +65,12 @@
     <string name="language_english">English</string>
     <string name="language_persian">فارسی</string>
     <string name="sign_out">خروج</string>
+    <string name="sign_out_subtitle">با امنیت از این حساب در این دستگاه خارج شوید.</string>
+    <string name="sign_out_confirm_title">از نوا خارج می‌شوید؟</string>
+    <string name="sign_out_confirm_message">برای دسترسی دوباره به پروفایل، چت‌ها و دانلودها باید وارد حساب شوید.</string>
+    <string name="cancel">انصراف</string>
+    <string name="settings_title">نوا را مطابق سلیقه خود تنظیم کنید</string>
+    <string name="settings_subtitle">ظاهر، زبان و اندازه نوشته‌های برنامه را انتخاب کنید.</string>
     <string name="premium">ویژه</string>
     <string name="upgrade_demo">فعال‌سازی نسخه آزمایشی ویژه</string>
     <string name="premium_download_required">دانلود آفلاین یک قابلیت ویژه است. برای دانلود موسیقی حسابتان را ارتقا دهید.</string>
@@ -81,6 +87,8 @@
     <string name="edit_profile_photo">انتخاب عکس پروفایل جدید</string>
     <string name="confirm_profile_changes">تأیید تغییرات پروفایل</string>
     <string name="profile_changes_hint">نام را ویرایش کنید و برای اعمال تغییرات، تیک کنار عکس را بزنید.</string>
+    <string name="edit_profile">ویرایش پروفایل</string>
+    <string name="cancel_editing">لغو ویرایش</string>
     <string name="premium_member">عضو پریمیوم</string>
     <string name="standard_member">عضو استاندارد</string>
     <string name="font_size">اندازه فونت</string>
@@ -160,10 +168,19 @@
     <string name="message_hint">پیام بنویسید</string>
     <string name="send_message">ارسال پیام</string>
     <string name="share_now_playing">اشتراک‌گذاری آهنگ در حال پخش</string>
+    <string name="share_track">اشتراک‌گذاری آهنگ</string>
+    <string name="choose_share_recipient">یک گفت‌وگو را انتخاب کنید</string>
+    <string name="share_no_conversations">ابتدا یک گفت‌وگو بسازید؛ سپس می‌توانید موسیقی را مستقیماً برای آن شنونده بفرستید.</string>
+    <string name="tap_to_share">برای ارسال این آهنگ بزنید</string>
+    <string name="share_with">اشتراک‌گذاری با %1$s</string>
     <string name="shared_music">موسیقی اشتراک‌گذاری‌شده</string>
     <string name="play_shared_track">پخش آهنگ اشتراک‌گذاری‌شده</string>
     <string name="message_sent">ارسال شد</string>
     <string name="message_delivered">تحویل شد</string>
     <string name="message_read">خوانده شد</string>
+    <string name="message_sending">در حال ارسال</string>
+    <string name="message_failed">ارسال پیام ناموفق بود</string>
     <string name="typing">%1$s در حال نوشتن است…</string>
+    <string name="tap_to_play_track">برای پخش در نوا بزنید</string>
+    <string name="chat_offline_history">تاریخچه آفلاین — برای پیام‌های جدید دوباره متصل شوید.</string>
 </resources>

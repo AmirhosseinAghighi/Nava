@@ -24,7 +24,7 @@ object NavaDimensions {
     val AuthContentMaxWidth = 520.dp
     val AuthButtonMinHeight = 52.dp
     val AuthProgressStrokeWidth = 2.dp
-    val PlayerArtworkMaxSize = 300.dp
+    val PlayerArtworkMaxSize = 268.dp
     val PlayerPrimaryControlSize = 76.dp
     val PlayerSecondaryControlSize = 56.dp
     val PlayerModeControlSize = 48.dp
@@ -53,6 +53,12 @@ object NavaDimensions {
     val ProfileDiscoverIconSize = 52.dp
     val SocialAvatarSize = 58.dp
     val PublicProfileAvatarSize = 124.dp
+    val ShareRecipientListHeight = 240.dp
+    val SettingsIconSize = 44.dp
+    val SettingsAccountIconSize = 52.dp
+    val ChatTrackArtworkSize = 72.dp
+    val ChatTrackPlayBadgeSize = 28.dp
+    val ChatReceiptIconSize = 18.dp
 }
 
 val NavaShapes = Shapes(

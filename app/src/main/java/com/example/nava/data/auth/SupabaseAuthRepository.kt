@@ -22,8 +22,7 @@ class SupabaseAuthRepository @Inject constructor(
         (status as? SessionStatus.Authenticated)
             ?.session
             ?.user
-            ?.email
-            ?.let(::AuthSession)
+            ?.let { user -> AuthSession(userId = user.id, email = user.email.orEmpty()) }
     }
 
     override suspend fun signIn(email: String, password: String): Result<Unit> = runCatching {

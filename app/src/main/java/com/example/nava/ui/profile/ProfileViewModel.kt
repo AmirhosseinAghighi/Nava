@@ -27,6 +27,10 @@ data class ProfileUiState(
     val avatarUrl: String? = null,
     val pendingAvatarUri: Uri? = null,
     val isPremium: Boolean = false,
+    val followersCount: Long = 0,
+    val followingCount: Long = 0,
+    val publicPlaylistsCount: Long = 0,
+    val isEditing: Boolean = false,
     val isSaving: Boolean = false,
     val hasChanges: Boolean = false,
     val error: String? = null,
@@ -51,6 +55,20 @@ class ProfileViewModel @Inject constructor(
         )
     }
 
+    fun startEditing() {
+        _state.value = _state.value.copy(isEditing = true, error = null)
+    }
+
+    fun cancelEditing() {
+        _state.value = _state.value.copy(
+            displayName = savedDisplayName,
+            pendingAvatarUri = null,
+            hasChanges = false,
+            isEditing = false,
+            error = null,
+        )
+    }
+
     fun selectAvatar(uri: Uri) {
         _state.value = _state.value.copy(
             pendingAvatarUri = uri,
@@ -63,7 +81,7 @@ class ProfileViewModel @Inject constructor(
         _state.value = _state.value.copy(isLoading = true, error = null)
         runCatching { loadProfile() }
             .onSuccess(::acceptSavedProfile)
-            .onFailure { error -> _state.value = _state.value.copy(isLoading = false, error = error.message ?: "Profile could not be loaded.") }
+            .onFailure { _state.value = _state.value.copy(isLoading = false, error = PROFILE_LOAD_ERROR) }
     }
 
     fun saveProfile() = viewModelScope.launch {
@@ -73,10 +91,11 @@ class ProfileViewModel @Inject constructor(
         runCatching {
             val avatarPath = current.pendingAvatarUri?.let { uploadAvatarFile(it) } ?: current.avatarPath
             updateProfile(current.displayName.trim(), avatarPath)
+            loadProfile()
         }.onSuccess { profile ->
             acceptSavedProfile(profile)
-        }.onFailure { error ->
-            _state.value = _state.value.copy(isSaving = false, error = error.message ?: "Profile could not be saved.")
+        }.onFailure {
+            _state.value = _state.value.copy(isSaving = false, error = PROFILE_SAVE_ERROR)
         }
     }
 
@@ -86,22 +105,49 @@ class ProfileViewModel @Inject constructor(
             supabase.postgrest.rpc("enable_demo_premium")
             loadProfile()
         }.onSuccess(::acceptSavedProfile)
-            .onFailure { error -> _state.value = _state.value.copy(isSaving = false, error = error.message ?: "Premium upgrade failed.") }
+            .onFailure { _state.value = _state.value.copy(isSaving = false, error = PREMIUM_UPGRADE_ERROR) }
     }
 
     fun dismissError() { _state.value = _state.value.copy(error = null) }
 
     private suspend fun loadProfile(): ProfileUiState {
-        val profile = supabase.postgrest.rpc("get_my_profile").decodeList<ProfileDto>().single()
-        return profile.toUiState()
+        return runCatching {
+            supabase.postgrest.rpc("get_my_profile_overview")
+                .decodeList<ProfileDto>()
+                .single()
+                .toUiState()
+        }.getOrElse {
+            loadLegacyProfile()
+        }
     }
 
-    private suspend fun updateProfile(displayName: String, avatarPath: String?): ProfileUiState {
-        val profile = supabase.postgrest.rpc("update_my_profile", buildJsonObject {
+    private suspend fun loadLegacyProfile(): ProfileUiState {
+        val profile = supabase.postgrest.rpc("get_my_profile").decodeList<LegacyProfileDto>().single()
+        val userId = supabase.auth.currentUserOrNull()?.id ?: error("Not signed in")
+        val followersCount = loadConnectionCount(userId, "followers")
+        val followingCount = loadConnectionCount(userId, "following")
+        val publicPlaylistsCount = runCatching {
+            supabase.postgrest.rpc("get_public_playlists", buildJsonObject {
+                put("p_owner_id", userId)
+                put("p_limit", SOCIAL_COUNT_LIMIT)
+            }).decodeList<IdDto>().size.toLong()
+        }.getOrDefault(0)
+        return profile.toUiState(followersCount, followingCount, publicPlaylistsCount)
+    }
+
+    private suspend fun loadConnectionCount(userId: String, kind: String): Long = runCatching {
+        supabase.postgrest.rpc("get_social_connections", buildJsonObject {
+            put("p_user_id", userId)
+            put("p_kind", kind)
+            put("p_limit", SOCIAL_COUNT_LIMIT)
+        }).decodeList<IdDto>().size.toLong()
+    }.getOrDefault(0)
+
+    private suspend fun updateProfile(displayName: String, avatarPath: String?) {
+        supabase.postgrest.rpc("update_my_profile", buildJsonObject {
             put("p_display_name", displayName)
             put("p_avatar_path", avatarPath.orEmpty())
-        }).decodeList<ProfileDto>().single()
-        return profile.toUiState()
+        })
     }
 
     private suspend fun uploadAvatarFile(uri: Uri): String {
@@ -126,6 +172,7 @@ class ProfileViewModel @Inject constructor(
             pendingAvatarUri = null,
             hasChanges = false,
             isSaving = false,
+            isEditing = false,
         )
     }
 
@@ -135,6 +182,27 @@ class ProfileViewModel @Inject constructor(
         avatarPath = avatarPath,
         avatarUrl = avatarPath?.let { supabase.storage.from(AVATAR_BUCKET).createSignedUrl(it.removePrefix("storage://$AVATAR_BUCKET/"), 10.minutes) },
         isPremium = isPremium,
+        followersCount = followersCount,
+        followingCount = followingCount,
+        publicPlaylistsCount = publicPlaylistsCount,
+    )
+
+    private suspend fun LegacyProfileDto.toUiState(
+        followersCount: Long,
+        followingCount: Long,
+        publicPlaylistsCount: Long,
+    ): ProfileUiState = ProfileUiState(
+        isLoading = false,
+        displayName = displayName,
+        avatarPath = avatarPath,
+        avatarUrl = avatarPath?.let {
+            supabase.storage.from(AVATAR_BUCKET)
+                .createSignedUrl(it.removePrefix("storage://$AVATAR_BUCKET/"), 10.minutes)
+        },
+        isPremium = isPremium,
+        followersCount = followersCount,
+        followingCount = followingCount,
+        publicPlaylistsCount = publicPlaylistsCount,
     )
 
     @Serializable
@@ -142,10 +210,27 @@ class ProfileViewModel @Inject constructor(
         @SerialName("display_name") val displayName: String,
         @SerialName("avatar_path") val avatarPath: String? = null,
         @SerialName("is_premium") val isPremium: Boolean,
+        @SerialName("followers_count") val followersCount: Long,
+        @SerialName("following_count") val followingCount: Long,
+        @SerialName("public_playlists_count") val publicPlaylistsCount: Long,
     )
+
+    @Serializable
+    private data class LegacyProfileDto(
+        @SerialName("display_name") val displayName: String,
+        @SerialName("avatar_path") val avatarPath: String? = null,
+        @SerialName("is_premium") val isPremium: Boolean,
+    )
+
+    @Serializable
+    private data class IdDto(val id: String)
 
     private companion object {
         const val AVATAR_BUCKET = "avatars"
         const val MAX_AVATAR_BYTES = 2 * 1024 * 1024
+        const val SOCIAL_COUNT_LIMIT = 50
+        const val PROFILE_LOAD_ERROR = "Your profile could not be loaded. Please try again."
+        const val PROFILE_SAVE_ERROR = "Your profile changes could not be saved. Please try again."
+        const val PREMIUM_UPGRADE_ERROR = "Premium could not be enabled right now. Please try again."
     }
 }

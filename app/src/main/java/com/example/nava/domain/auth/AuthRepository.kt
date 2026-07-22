@@ -2,7 +2,7 @@ package com.example.nava.domain.auth
 
 import kotlinx.coroutines.flow.Flow
 
-data class AuthSession(val email: String)
+data class AuthSession(val userId: String, val email: String)
 
 interface AuthRepository {
     val session: Flow<AuthSession?>
