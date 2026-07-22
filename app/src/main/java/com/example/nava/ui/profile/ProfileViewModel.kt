@@ -25,8 +25,10 @@ data class ProfileUiState(
     val displayName: String = "",
     val avatarPath: String? = null,
     val avatarUrl: String? = null,
+    val pendingAvatarUri: Uri? = null,
     val isPremium: Boolean = false,
     val isSaving: Boolean = false,
+    val hasChanges: Boolean = false,
     val error: String? = null,
 )
 
@@ -37,52 +39,44 @@ class ProfileViewModel @Inject constructor(
 ) : ViewModel() {
     private val _state = MutableStateFlow(ProfileUiState())
     val state = _state.asStateFlow()
+    private var savedDisplayName = ""
 
     init { reload() }
 
     fun changeDisplayName(value: String) {
-        _state.value = _state.value.copy(displayName = value, error = null)
+        _state.value = _state.value.copy(
+            displayName = value,
+            hasChanges = value.trim() != savedDisplayName || _state.value.pendingAvatarUri != null,
+            error = null,
+        )
+    }
+
+    fun selectAvatar(uri: Uri) {
+        _state.value = _state.value.copy(
+            pendingAvatarUri = uri,
+            hasChanges = true,
+            error = null,
+        )
     }
 
     fun reload() = viewModelScope.launch {
         _state.value = _state.value.copy(isLoading = true, error = null)
         runCatching { loadProfile() }
-            .onSuccess { profile -> _state.value = profile }
+            .onSuccess(::acceptSavedProfile)
             .onFailure { error -> _state.value = _state.value.copy(isLoading = false, error = error.message ?: "Profile could not be loaded.") }
     }
 
     fun saveProfile() = viewModelScope.launch {
         val current = _state.value
+        if (!current.hasChanges || current.displayName.trim().length !in 2..60) return@launch
         _state.value = current.copy(isSaving = true, error = null)
         runCatching {
-            updateProfile(current.displayName, current.avatarPath)
+            val avatarPath = current.pendingAvatarUri?.let { uploadAvatarFile(it) } ?: current.avatarPath
+            updateProfile(current.displayName.trim(), avatarPath)
         }.onSuccess { profile ->
-            _state.value = profile
+            acceptSavedProfile(profile)
         }.onFailure { error ->
             _state.value = _state.value.copy(isSaving = false, error = error.message ?: "Profile could not be saved.")
-        }
-    }
-
-    fun uploadAvatar(uri: Uri) = viewModelScope.launch {
-        val current = _state.value
-        _state.value = current.copy(isSaving = true, error = null)
-        runCatching {
-            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                ?: error("Unable to read the selected image.")
-            require(bytes.size <= MAX_AVATAR_BYTES) { "Avatar images must be 2 MB or smaller." }
-            val extension = when (context.contentResolver.getType(uri)) {
-                "image/png" -> "png"
-                "image/webp" -> "webp"
-                else -> "jpg"
-            }
-            val userId = supabase.auth.currentUserOrNull()?.id ?: error("You must be signed in to update an avatar.")
-            val objectPath = "$userId/avatar.$extension"
-            supabase.storage.from(AVATAR_BUCKET).upload(objectPath, bytes) { upsert = true }
-            updateProfile(current.displayName, "storage://$AVATAR_BUCKET/$objectPath")
-        }.onSuccess { profile ->
-            _state.value = profile
-        }.onFailure { error ->
-            _state.value = _state.value.copy(isSaving = false, error = error.message ?: "Avatar upload failed.")
         }
     }
 
@@ -91,7 +85,7 @@ class ProfileViewModel @Inject constructor(
         runCatching {
             supabase.postgrest.rpc("enable_demo_premium")
             loadProfile()
-        }.onSuccess { profile -> _state.value = profile }
+        }.onSuccess(::acceptSavedProfile)
             .onFailure { error -> _state.value = _state.value.copy(isSaving = false, error = error.message ?: "Premium upgrade failed.") }
     }
 
@@ -108,6 +102,31 @@ class ProfileViewModel @Inject constructor(
             put("p_avatar_path", avatarPath.orEmpty())
         }).decodeList<ProfileDto>().single()
         return profile.toUiState()
+    }
+
+    private suspend fun uploadAvatarFile(uri: Uri): String {
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            ?: error("Unable to read the selected image.")
+        require(bytes.size <= MAX_AVATAR_BYTES) { "Avatar images must be 2 MB or smaller." }
+        val extension = when (context.contentResolver.getType(uri)) {
+            "image/png" -> "png"
+            "image/webp" -> "webp"
+            else -> "jpg"
+        }
+        val userId = supabase.auth.currentUserOrNull()?.id
+            ?: error("You must be signed in to update an avatar.")
+        val objectPath = "$userId/avatar.$extension"
+        supabase.storage.from(AVATAR_BUCKET).upload(objectPath, bytes) { upsert = true }
+        return "storage://$AVATAR_BUCKET/$objectPath"
+    }
+
+    private fun acceptSavedProfile(profile: ProfileUiState) {
+        savedDisplayName = profile.displayName
+        _state.value = profile.copy(
+            pendingAvatarUri = null,
+            hasChanges = false,
+            isSaving = false,
+        )
     }
 
     private suspend fun ProfileDto.toUiState(): ProfileUiState = ProfileUiState(

@@ -68,6 +68,10 @@
     <string name="premium">ویژه</string>
     <string name="upgrade_demo">فعال‌سازی نسخه آزمایشی ویژه</string>
     <string name="premium_download_required">دانلود آفلاین یک قابلیت ویژه است. برای دانلود موسیقی حسابتان را ارتقا دهید.</string>
+    <string name="premium_required_title">نیاز به اشتراک پریمیوم</string>
+    <string name="download_unavailable_title">دانلود در دسترس نیست</string>
+    <string name="download_unavailable">دانلود آغاز نشد. اتصال اینترنت را بررسی و دوباره تلاش کنید.</string>
+    <string name="got_it">متوجه شدم</string>
     <string name="standard">استاندارد</string>
     <string name="account">حساب کاربری</string>
     <string name="user_avatar">آواتار کاربر</string>

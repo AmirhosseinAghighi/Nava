@@ -68,6 +68,10 @@
     <string name="premium">Premium</string>
     <string name="upgrade_demo">Enable Premium demo</string>
     <string name="premium_download_required">Offline downloads are a Premium feature. Upgrade your account to download music.</string>
+    <string name="premium_required_title">Premium required</string>
+    <string name="download_unavailable_title">Download unavailable</string>
+    <string name="download_unavailable">The download could not start. Check your connection and try again.</string>
+    <string name="got_it">Got it</string>
     <string name="standard">Standard</string>
     <string name="account">Account</string>
     <string name="user_avatar">User avatar</string>

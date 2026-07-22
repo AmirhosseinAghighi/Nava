@@ -42,8 +42,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Chat
+import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Clear
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Groups
@@ -69,6 +73,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -78,6 +83,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -149,9 +155,12 @@ import com.example.nava.ui.library.LibraryUiState
 import com.example.nava.ui.library.LibraryViewModel
 import com.example.nava.ui.library.LikesViewModel
 import com.example.nava.ui.downloads.DownloadViewModel
+import com.example.nava.ui.downloads.DownloadUiError
 import com.example.nava.ui.downloads.DownloadsUiState
 import com.example.nava.ui.profile.ProfileViewModel
 import com.example.nava.ui.social.SocialViewModel
+import com.example.nava.ui.social.PublicPlaylist
+import com.example.nava.ui.social.SocialProfileDetails
 import com.example.nava.ui.social.SocialPerson
 import com.example.nava.ui.social.SocialSection
 import com.example.nava.ui.chat.ChatShell
@@ -225,16 +234,31 @@ fun NavaAppShell(
     Scaffold(
         topBar = {
             TopAppBar(
+                navigationIcon = {
+                    if (settingsOpen || socialOpen) {
+                        IconButton(onClick = {
+                            settingsOpen = false
+                            socialOpen = false
+                        }) {
+                            Icon(Icons.Outlined.ArrowBack, contentDescription = stringResource(R.string.back))
+                        }
+                    }
+                },
                 title = {
-                    if (settingsOpen) Text(stringResource(R.string.settings), style = MaterialTheme.typography.titleLarge)
-                    else NavaTopBarBrand()
+                    when {
+                        settingsOpen -> Text(stringResource(R.string.settings), style = MaterialTheme.typography.titleLarge)
+                        socialOpen -> Text(stringResource(R.string.discover_people), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        else -> NavaTopBarBrand()
+                    }
                 },
                 actions = {
-                    IconButton(onClick = {}) {
-                        Icon(Icons.Outlined.NotificationsNone, contentDescription = stringResource(R.string.notification))
-                    }
-                    IconButton(onClick = { settingsOpen = !settingsOpen }) {
-                        Icon(Icons.Outlined.Settings, contentDescription = stringResource(R.string.open_settings))
+                    if (!settingsOpen && !socialOpen) {
+                        IconButton(onClick = {}) {
+                            Icon(Icons.Outlined.NotificationsNone, contentDescription = stringResource(R.string.notification))
+                        }
+                        IconButton(onClick = { settingsOpen = true }) {
+                            Icon(Icons.Outlined.Settings, contentDescription = stringResource(R.string.open_settings))
+                        }
                     }
                 },
             )
@@ -263,7 +287,7 @@ fun NavaAppShell(
     ) { padding ->
         when {
             settingsOpen -> SettingsShell(preferences, onEvent, Modifier.padding(padding))
-            socialOpen -> SocialShell(Modifier.padding(padding))
+            socialOpen -> SocialShell(Modifier.padding(padding), onBack = { socialOpen = false })
             selectedIndex == 0 -> HomeShell(
                 modifier = Modifier.padding(padding),
                 onPlay = playbackViewModel::play,
@@ -414,10 +438,26 @@ fun NavaAppShell(
     downloadError?.let { error ->
         AlertDialog(
             onDismissRequest = downloadViewModel::dismissDownloadError,
-            text = { Text(error) },
+            title = {
+                Text(
+                    text = stringResource(
+                        if (error == DownloadUiError.PremiumRequired) R.string.premium_required_title
+                        else R.string.download_unavailable_title,
+                    ),
+                    fontWeight = FontWeight.Bold,
+                )
+            },
+            text = {
+                Text(
+                    stringResource(
+                        if (error == DownloadUiError.PremiumRequired) R.string.premium_download_required
+                        else R.string.download_unavailable,
+                    ),
+                )
+            },
             confirmButton = {
                 Button(onClick = downloadViewModel::dismissDownloadError) {
-                    Text(stringResource(R.string.close))
+                    Text(stringResource(R.string.got_it))
                 }
             },
         )

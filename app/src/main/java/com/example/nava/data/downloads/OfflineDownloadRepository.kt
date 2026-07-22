@@ -73,7 +73,10 @@ class OfflineDownloadRepository @Inject constructor(
             .addTag("$COVER_TAG_PREFIX${track.coverImageUrl}")
             .build()
         workManager.enqueueUniqueWork("download-${track.id}", ExistingWorkPolicy.KEEP, request)
-    }
+    }.fold(
+        onSuccess = { Result.success(Unit) },
+        onFailure = { Result.failure(it.toDownloadFailure()) },
+    )
 
     suspend fun remove(track: OfflineTrackEntity) {
         File(track.audioPath).delete()
