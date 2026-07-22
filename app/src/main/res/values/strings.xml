@@ -30,6 +30,16 @@
     <string name="home">Home</string>
     <string name="search">Search</string>
     <string name="search_catalog">Search tracks or artists</string>
+    <string name="search_title">Find your next favorite</string>
+    <string name="search_subtitle">Search the Nava catalog by track or artist.</string>
+    <string name="search_start_title">What do you want to hear?</string>
+    <string name="search_start_subtitle">Type a track or artist name to start exploring.</string>
+    <string name="search_results_count">%1$d results</string>
+    <string name="clear_search">Clear search</string>
+    <string name="play_track">Play %1$s</string>
+    <string name="track_more_options">More options for %1$s</string>
+    <string name="search_error_hint">Check your connection, then try the search again.</string>
+    <string name="search_empty_hint">Try another spelling, artist, or language filter.</string>
     <string name="filter_all">All</string><string name="filter_english">English</string><string name="filter_persian">Persian</string>
     <string name="search_error">Search is unavailable. Try again.</string><string name="search_empty">No matching music found.</string>
     <string name="downloads">Downloads</string>
@@ -98,6 +108,7 @@
     <string name="playback_channel_name">Music playback</string>
     <string name="sleep_15">Sleep 15 min</string><string name="sleep_30">Sleep 30 min</string><string name="close">Close</string>
     <string name="song_actions">Song actions</string>
+    <string name="play_now">Play now</string>
     <string name="add_to_queue">Add to queue</string>
     <string name="quick_liked">Liked songs</string>
     <string name="quick_recent">Recently played</string>

@@ -21,11 +21,34 @@ class SupabaseSearchRepository @Inject constructor(private val supabase: Supabas
             put("p_language_code", language?.let(::JsonPrimitive) ?: kotlinx.serialization.json.JsonNull)
             put("p_limit", 30)
             put("p_offset", offset)
-        }).decodeList<SearchTrackDto>().let { rows -> SearchPage(rows.map { SearchTrack(it.id, it.title, it.artistName, it.genre, it.languageCode) }, rows.firstOrNull()?.totalCount ?: 0) }
+        }).decodeList<SearchTrackDto>().let { rows ->
+            SearchPage(
+                tracks = rows.map { track ->
+                    SearchTrack(
+                        id = track.id,
+                        title = track.title,
+                        artistName = track.artistName,
+                        coverImageUrl = track.coverImageUrl.toPublicCoverUrl(supabase),
+                        audioUrl = track.audioUrl,
+                        durationSeconds = track.durationSeconds,
+                        genre = track.genre,
+                        languageCode = track.languageCode,
+                    )
+                },
+                totalCount = rows.firstOrNull()?.totalCount ?: 0,
+            )
+        }
     }
 }
 
 @Serializable private data class SearchTrackDto(
-    val id: String, val title: String, @SerialName("artist_name") val artistName: String,
-    val genre: String, @SerialName("language_code") val languageCode: String, @SerialName("total_count") val totalCount: Long,
+    val id: String,
+    val title: String,
+    @SerialName("artist_name") val artistName: String,
+    @SerialName("cover_image_url") val coverImageUrl: String,
+    @SerialName("audio_url") val audioUrl: String,
+    @SerialName("duration_seconds") val durationSeconds: Int,
+    val genre: String,
+    @SerialName("language_code") val languageCode: String,
+    @SerialName("total_count") val totalCount: Long,
 )

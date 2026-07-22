@@ -42,12 +42,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Clear
+import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.ManageSearch
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material.icons.outlined.Settings
@@ -64,10 +67,13 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
@@ -105,10 +111,15 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.palette.graphics.Palette
 import coil.compose.AsyncImage
@@ -116,6 +127,7 @@ import coil.request.ImageRequest
 import com.example.nava.R
 import com.example.nava.domain.auth.AuthSession
 import com.example.nava.domain.catalog.HomeTrack
+import com.example.nava.domain.catalog.SearchTrack
 import com.example.nava.domain.preferences.AppLanguage
 import com.example.nava.domain.preferences.FontScale
 import com.example.nava.domain.preferences.ThemeMode
@@ -250,7 +262,15 @@ fun NavaAppShell(
                 onQueue = { queueCandidate = it },
                 onShuffleSource = playbackViewModel::setShuffleSource,
             )
-            selectedIndex == 1 -> SearchShell(modifier = Modifier.padding(padding))
+            selectedIndex == 1 -> SearchShell(
+                modifier = Modifier.padding(padding),
+                currentTrackId = nowPlaying?.track?.id,
+                onTrackClick = { track ->
+                    if (nowPlaying?.track?.id != track.id) playbackViewModel.play(track)
+                    playerExpanded = true
+                },
+                onTrackOptions = { queueCandidate = it },
+            )
             selectedIndex == 2 -> DownloadsShell(Modifier.padding(padding), downloadState, downloadViewModel)
             selectedIndex == 3 -> LibraryShell(modifier = Modifier.padding(padding), likesViewModel = likesViewModel)
             selectedIndex == 4 -> ProfileShell(session, Modifier.padding(padding), onDiscoverPeople = { socialOpen = true })
@@ -294,43 +314,94 @@ fun NavaAppShell(
         val isDownloading = track.id in downloadState.downloadingTrackIds
         val likes by likesViewModel.state.collectAsState()
         val isLiked = track.id in likes.likedIds
-        AlertDialog(
+        ModalBottomSheet(
             onDismissRequest = { queueCandidate = null },
-            title = { Text(stringResource(R.string.song_actions)) },
-            text = { Text("${track.title}\n${track.artistName}") },
-            confirmButton = {
-                Button(onClick = {
-                    playbackViewModel.addToQueue(track)
-                    queueCandidate = null
-                }) {
-                    Text(stringResource(R.string.add_to_queue))
-                }
-            },
-            dismissButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-                    Button(onClick = { likesViewModel.toggle(track) }) { Text(stringResource(if (isLiked) R.string.unlike_song else R.string.like_song)) }
-                    Button(
-                        enabled = !isDownloaded && !isDownloading,
-                        onClick = {
-                            downloadViewModel.request(track)
-                            selectedIndex = 2
-                            queueCandidate = null
-                        },
-                    ) {
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = NavaSpacing.Lg),
+                verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = NavaSpacing.Sm),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+                ) {
+                    AsyncImage(
+                        model = track.coverImageUrl,
+                        contentDescription = stringResource(R.string.track_artwork, track.title),
+                        contentScale = ContentScale.Crop,
+                        error = painterResource(R.drawable.ic_launcher_foreground),
+                        modifier = Modifier
+                            .size(NavaDimensions.SearchActionArtworkSize)
+                            .clip(MaterialTheme.shapes.medium)
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            stringResource(
-                                when {
-                                    isDownloaded -> R.string.downloaded
-                                    isDownloading -> R.string.downloading
-                                    else -> R.string.download
-                                },
-                            ),
+                            text = track.title,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = track.artistName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    Button(onClick = { queueCandidate = null }) { Text(stringResource(R.string.close)) }
                 }
-            },
-        )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                SongActionRow(
+                    icon = Icons.Outlined.PlayArrow,
+                    label = stringResource(R.string.play_now),
+                    onClick = {
+                        playbackViewModel.play(track)
+                        playerExpanded = true
+                        queueCandidate = null
+                    },
+                )
+                SongActionRow(
+                    icon = Icons.Outlined.QueueMusic,
+                    label = stringResource(R.string.add_to_queue),
+                    onClick = {
+                        playbackViewModel.addToQueue(track)
+                        queueCandidate = null
+                    },
+                )
+                SongActionRow(
+                    icon = if (isLiked) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
+                    label = stringResource(if (isLiked) R.string.unlike_song else R.string.like_song),
+                    onClick = {
+                        likesViewModel.toggle(track)
+                        queueCandidate = null
+                    },
+                )
+                SongActionRow(
+                    icon = Icons.Outlined.Download,
+                    label = stringResource(
+                        when {
+                            isDownloaded -> R.string.downloaded
+                            isDownloading -> R.string.downloading
+                            else -> R.string.download
+                        },
+                    ),
+                    enabled = !isDownloaded && !isDownloading,
+                    onClick = {
+                        downloadViewModel.request(track)
+                        selectedIndex = 2
+                        queueCandidate = null
+                    },
+                )
+                Spacer(Modifier.height(NavaSpacing.Lg))
+            }
+        }
     }
     downloadError?.let { error ->
         AlertDialog(
@@ -342,6 +413,46 @@ fun NavaAppShell(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun SongActionRow(
+    icon: ImageVector,
+    label: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            Surface(
+                modifier = Modifier.size(NavaDimensions.SearchActionIconSize),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(NavaSpacing.Sm),
+                )
+            }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
     }
 }
 
@@ -784,26 +895,269 @@ private fun NowPlayingArtwork(
 }
 
 @Composable
-private fun SearchShell(modifier: Modifier, viewModel: SearchViewModel = hiltViewModel()) {
+private fun SearchShell(
+    modifier: Modifier,
+    currentTrackId: String?,
+    onTrackClick: (HomeTrack) -> Unit,
+    onTrackOptions: (HomeTrack) -> Unit,
+    viewModel: SearchViewModel = hiltViewModel(),
+) {
     val state by viewModel.state.collectAsState()
-    Column(modifier = modifier.fillMaxSize().padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
-        OutlinedTextField(value = state.query, onValueChange = viewModel::updateQuery, label = { Text(stringResource(R.string.search_catalog)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-            AssistChip(onClick = { viewModel.setLanguage(null) }, label = { Text(stringResource(R.string.filter_all)) })
-            AssistChip(onClick = { viewModel.setLanguage("en") }, label = { Text(stringResource(R.string.filter_english)) })
-            AssistChip(onClick = { viewModel.setLanguage("fa") }, label = { Text(stringResource(R.string.filter_persian)) })
+    val focusManager = LocalFocusManager.current
+    Column(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.padding(horizontal = NavaSpacing.Lg, vertical = NavaSpacing.Md),
+            verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+        ) {
+            Text(
+                text = stringResource(R.string.search_title),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = stringResource(R.string.search_subtitle),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedTextField(
+                value = state.query,
+                onValueChange = viewModel::updateQuery,
+                placeholder = { Text(stringResource(R.string.search_catalog)) },
+                leadingIcon = { Icon(Icons.Outlined.ManageSearch, contentDescription = null) },
+                trailingIcon = {
+                    if (state.query.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.updateQuery("") }) {
+                            Icon(Icons.Outlined.Clear, contentDescription = stringResource(R.string.clear_search))
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = MaterialTheme.shapes.large,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                SearchFilterChip(
+                    selected = state.language == null,
+                    label = R.string.filter_all,
+                    onClick = { viewModel.setLanguage(null) },
+                )
+                SearchFilterChip(
+                    selected = state.language == "en",
+                    label = R.string.filter_english,
+                    onClick = { viewModel.setLanguage("en") },
+                )
+                SearchFilterChip(
+                    selected = state.language == "fa",
+                    label = R.string.filter_persian,
+                    onClick = { viewModel.setLanguage("fa") },
+                )
+            }
         }
         when {
-            state.loading -> CircularProgressIndicator()
-            state.failed -> Text(stringResource(R.string.search_error))
-            state.query.isNotBlank() && state.results.isEmpty() -> Text(stringResource(R.string.search_empty))
-            else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-                items(state.results, key = { it.id }) { track -> Card { Column(Modifier.padding(NavaSpacing.Md)) { Text(track.title, style = MaterialTheme.typography.titleMedium); Text(track.artistName, style = MaterialTheme.typography.bodyMedium) } } }
-                if (state.canLoadMore) item { LaunchedEffect(state.results.size) { viewModel.loadMore() }; CircularProgressIndicator() }
+            state.query.isBlank() -> SearchMessage(
+                title = stringResource(R.string.search_start_title),
+                body = stringResource(R.string.search_start_subtitle),
+            )
+            state.loading && state.results.isEmpty() -> Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) { CircularProgressIndicator() }
+            state.failed -> SearchMessage(
+                title = stringResource(R.string.search_error),
+                body = stringResource(R.string.search_error_hint),
+                action = { Button(onClick = viewModel::retry) { Text(stringResource(R.string.retry)) } },
+            )
+            state.results.isEmpty() -> SearchMessage(
+                title = stringResource(R.string.search_empty),
+                body = stringResource(R.string.search_empty_hint),
+            )
+            else -> LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    start = NavaSpacing.Lg,
+                    end = NavaSpacing.Lg,
+                    top = NavaSpacing.Xs,
+                    bottom = NavaSpacing.Xl,
+                ),
+                verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+            ) {
+                item {
+                    Text(
+                        text = stringResource(R.string.search_results_count, state.results.size),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = NavaSpacing.Xs),
+                    )
+                }
+                if (state.loading) item { LinearProgressIndicator(modifier = Modifier.fillMaxWidth()) }
+                items(state.results, key = SearchTrack::id) { track ->
+                    SearchTrackRow(
+                        track = track,
+                        isCurrent = track.id == currentTrackId,
+                        onClick = {
+                            focusManager.clearFocus()
+                            onTrackClick(track.toHomeTrack())
+                        },
+                        onOptions = {
+                            focusManager.clearFocus()
+                            onTrackOptions(track.toHomeTrack())
+                        },
+                    )
+                }
+                if (state.canLoadMore) item {
+                    LaunchedEffect(state.results.size) { viewModel.loadMore() }
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Md),
+                        contentAlignment = Alignment.Center,
+                    ) { CircularProgressIndicator() }
+                }
             }
         }
     }
 }
+
+@Composable
+private fun SearchFilterChip(selected: Boolean, @StringRes label: Int, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = {
+            Text(
+                text = stringResource(label),
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            )
+        },
+    )
+}
+
+@Composable
+private fun SearchMessage(
+    title: String,
+    body: String,
+    action: (@Composable () -> Unit)? = null,
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(NavaSpacing.Xl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Surface(
+            modifier = Modifier.size(NavaDimensions.SearchEmptyIconSize),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primaryContainer,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Outlined.ManageSearch,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(NavaDimensions.SearchEmptyGlyphSize),
+                )
+            }
+        }
+        Spacer(Modifier.height(NavaSpacing.Lg))
+        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(NavaSpacing.Xs))
+        Text(
+            body,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        action?.let {
+            Spacer(Modifier.height(NavaSpacing.Lg))
+            it()
+        }
+    }
+}
+
+@Composable
+private fun SearchTrackRow(
+    track: SearchTrack,
+    isCurrent: Boolean,
+    onClick: () -> Unit,
+    onOptions: () -> Unit,
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(
+            containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = NavaSpacing.Xs),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            Box {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(track.coverImageUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = stringResource(R.string.track_artwork, track.title),
+                    contentScale = ContentScale.Crop,
+                    error = painterResource(R.drawable.ic_launcher_foreground),
+                    modifier = Modifier
+                        .size(NavaDimensions.SearchTrackArtworkSize)
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                )
+                Surface(
+                    modifier = Modifier.align(Alignment.BottomEnd).size(NavaDimensions.SearchPlayBadgeSize),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary,
+                    shadowElevation = NavaSpacing.Xs,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.PlayArrow,
+                        contentDescription = stringResource(R.string.play_track, track.title),
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.padding(NavaSpacing.Xs),
+                    )
+                }
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
+                Text(
+                    text = track.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = track.artistName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "${track.genre} • ${formatTrackDuration(track.durationSeconds)}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (isCurrent) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+            IconButton(onClick = onOptions) {
+                Icon(
+                    imageVector = Icons.Outlined.MoreVert,
+                    contentDescription = stringResource(R.string.track_more_options, track.title),
+                )
+            }
+        }
+    }
+}
+
+private fun formatTrackDuration(durationSeconds: Int): String =
+    "${durationSeconds / 60}:${(durationSeconds % 60).toString().padStart(2, '0')}"
 
 @Composable
 private fun HomeShell(

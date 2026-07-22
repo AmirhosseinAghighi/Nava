@@ -39,6 +39,12 @@ object NavaDimensions {
     val HomeQuickActionWidth = 154.dp
     val HomeQuickActionHeight = 72.dp
     val MiniPlayerArtworkSize = 48.dp
+    val SearchTrackArtworkSize = 72.dp
+    val SearchPlayBadgeSize = 28.dp
+    val SearchEmptyIconSize = 88.dp
+    val SearchEmptyGlyphSize = 40.dp
+    val SearchActionArtworkSize = 64.dp
+    val SearchActionIconSize = 44.dp
 }
 
 val NavaShapes = Shapes(
