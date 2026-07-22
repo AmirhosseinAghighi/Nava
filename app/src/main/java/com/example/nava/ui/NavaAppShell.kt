@@ -19,6 +19,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.combinedClickable
@@ -1026,9 +1027,15 @@ private fun MiniPlayer(nowPlaying: NowPlaying, onToggle: () -> Unit, onOpen: () 
             Column(modifier = Modifier.weight(1f).padding(start = NavaSpacing.Sm)) {
                 Text(
                     nowPlaying.track.title,
+                    modifier = Modifier.basicMarquee(
+                        iterations = Int.MAX_VALUE,
+                        initialDelayMillis = 1_000,
+                    ),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Clip,
                 )
                 Text(
                     nowPlaying.track.artistName,
@@ -1319,10 +1326,18 @@ private fun FullPlayer(
                     ) {
                         Text(
                             text = nowPlaying.track.title,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .basicMarquee(
+                                    iterations = Int.MAX_VALUE,
+                                    initialDelayMillis = 1_000,
+                                ),
                             style = MaterialTheme.typography.headlineSmall,
                             color = MaterialTheme.colorScheme.onBackground,
                             textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Clip,
                         )
                         Text(
                             text = nowPlaying.track.artistName,
