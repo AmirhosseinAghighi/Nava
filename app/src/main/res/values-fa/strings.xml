@@ -223,6 +223,11 @@
     <string name="playlist_no_songs">این پلی‌لیست خالی است</string>
     <string name="playlist_no_songs_hint">برای شروع، آهنگ‌هایی از کاتالوگ نوا اضافه کنید.</string>
     <string name="add_songs">افزودن آهنگ</string>
+    <string name="add_to_playlist">افزودن به پلی‌لیست</string>
+    <string name="choose_playlist">انتخاب پلی‌لیست</string>
+    <string name="choose_playlist_hint">محلی را که می‌خواهید این آهنگ ذخیره شود انتخاب کنید.</string>
+    <string name="no_playlists_for_track">هنوز پلی‌لیستی ندارید</string>
+    <string name="no_playlists_for_track_hint">از کتابخانه یک پلی‌لیست بسازید و سپس برای افزودن این آهنگ برگردید.</string>
     <string name="search_playlist_songs">جستجوی آهنگ یا هنرمند</string>
     <string name="no_tracks_found">آهنگ مطابقی پیدا نشد.</string>
     <string name="add">افزودن</string>

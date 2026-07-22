@@ -223,6 +223,11 @@
     <string name="playlist_no_songs">This playlist is empty</string>
     <string name="playlist_no_songs_hint">Add songs from the Nava catalog to start listening.</string>
     <string name="add_songs">Add songs</string>
+    <string name="add_to_playlist">Add to playlist</string>
+    <string name="choose_playlist">Choose a playlist</string>
+    <string name="choose_playlist_hint">Select where you want to save this track.</string>
+    <string name="no_playlists_for_track">No playlists yet</string>
+    <string name="no_playlists_for_track_hint">Create a playlist from your Library, then come back to add this track.</string>
     <string name="search_playlist_songs">Search songs or artists</string>
     <string name="no_tracks_found">No matching songs found.</string>
     <string name="add">Add</string>

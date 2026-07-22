@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.AnimatedVisibility
@@ -32,6 +33,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -130,8 +132,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -249,12 +253,14 @@ fun NavaAppShell(
     var playerExpanded by rememberSaveable { mutableStateOf(false) }
     var queueCandidate by remember { mutableStateOf<HomeTrack?>(null) }
     var shareCandidate by remember { mutableStateOf<HomeTrack?>(null) }
+    var addToPlaylistCandidate by remember { mutableStateOf<HomeTrack?>(null) }
     val playbackViewModel: PlaybackViewModel = hiltViewModel(key = "playback:${session.userId}")
     val downloadViewModel: DownloadViewModel = hiltViewModel(key = "downloads:${session.userId}")
     val likesViewModel: LikesViewModel = hiltViewModel(key = "likes:${session.userId}")
     val chatViewModel: ChatViewModel = hiltViewModel(key = "chat:${session.userId}")
     val profileViewModel: ProfileViewModel = hiltViewModel(key = "profile:${session.userId}")
     val socialViewModel: SocialViewModel = hiltViewModel(key = "social:${session.userId}")
+    val libraryViewModel: LibraryViewModel = hiltViewModel(key = "library:${session.userId}")
     val nowPlaying by playbackViewModel.nowPlaying.collectAsState()
     val playbackSpeed by playbackViewModel.playbackSpeed.collectAsState()
     val sleepTimerMinutes by playbackViewModel.sleepTimerMinutes.collectAsState()
@@ -266,6 +272,7 @@ fun NavaAppShell(
     val downloadError by downloadViewModel.downloadError.collectAsState()
     val likesState by likesViewModel.state.collectAsState()
     val chatState by chatViewModel.state.collectAsState()
+    val libraryState by libraryViewModel.state.collectAsState()
     BackHandler(enabled = settingsOpen) {
         settingsOpen = false
     }
@@ -275,6 +282,7 @@ fun NavaAppShell(
             !playerExpanded &&
             queueCandidate == null &&
             shareCandidate == null &&
+            addToPlaylistCandidate == null &&
             selectedIndex != 0,
     ) {
         selectedIndex = 0
@@ -388,6 +396,7 @@ fun NavaAppShell(
                     playerExpanded = true
                 },
                 onTrackOptions = { queueCandidate = it },
+                viewModel = libraryViewModel,
             )
             selectedIndex == 4 -> ProfileShell(
                 session = session,
@@ -416,6 +425,9 @@ fun NavaAppShell(
                 isLiked = now.track.id in likesState.likedIds,
                 isDownloaded = now.track.id in downloadState.downloadedTrackIds,
                 isDownloading = now.track.id in downloadState.downloadingTrackIds,
+                downloadProgressPercent = downloadState.activeDownloads
+                    .firstOrNull { it.trackId == now.track.id }
+                    ?.progressPercent,
                 fftBands = fftBands,
                 onDismiss = { playerExpanded = false },
                 onToggle = { if (now.playing) playbackViewModel.pause() else playbackViewModel.resume() },
@@ -426,11 +438,34 @@ fun NavaAppShell(
                 onCycleRepeat = playbackViewModel::cycleRepeatMode,
                 onToggleLike = { likesViewModel.toggle(now.track) },
                 onDownload = { downloadViewModel.request(now.track) },
+                onAddToPlaylist = {
+                    libraryViewModel.clearOperationError()
+                    addToPlaylistCandidate = now.track
+                },
                 onShare = { shareCandidate = now.track },
                 onPrevious = playbackViewModel::skipToPrevious,
                 onNext = playbackViewModel::skipToNext,
             )
         }
+    }
+    addToPlaylistCandidate?.let { track ->
+        AddToPlaylistSheet(
+            track = track,
+            playlists = libraryState.summary.playlists,
+            loading = libraryState.loading,
+            busy = libraryState.busy,
+            operationFailed = libraryState.operationFailed,
+            onDismiss = { addToPlaylistCandidate = null },
+            onRetry = {
+                libraryViewModel.clearOperationError()
+                libraryViewModel.reload()
+            },
+            onPlaylistSelected = { playlist ->
+                libraryViewModel.addTrackToPlaylist(playlist.id, track.id) { success ->
+                    if (success) addToPlaylistCandidate = null
+                }
+            },
+        )
     }
     if (playbackError) {
         AlertDialog(
@@ -781,6 +816,153 @@ private fun MiniPlayer(nowPlaying: NowPlaying, onToggle: () -> Unit, onOpen: () 
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun AddToPlaylistSheet(
+    track: HomeTrack,
+    playlists: List<UserPlaylist>,
+    loading: Boolean,
+    busy: Boolean,
+    operationFailed: Boolean,
+    onDismiss: () -> Unit,
+    onRetry: () -> Unit,
+    onPlaylistSelected: (UserPlaylist) -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = NavaSpacing.Lg),
+            verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            Text(
+                text = stringResource(R.string.choose_playlist),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = stringResource(R.string.choose_playlist_hint),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                shape = MaterialTheme.shapes.large,
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Md),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+                ) {
+                    AsyncImage(
+                        model = track.coverImageUrl,
+                        contentDescription = stringResource(R.string.track_artwork, track.title),
+                        contentScale = ContentScale.Crop,
+                        error = painterResource(R.drawable.ic_launcher_foreground),
+                        modifier = Modifier.size(58.dp).clip(MaterialTheme.shapes.medium),
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(track.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1)
+                        Text(
+                            track.artistName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+            when {
+                loading || busy -> Box(
+                    modifier = Modifier.fillMaxWidth().height(180.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
+                operationFailed -> Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Lg),
+                        verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+                    ) {
+                        Text(stringResource(R.string.playlist_action_failed), fontWeight = FontWeight.Bold)
+                        Text(
+                            stringResource(R.string.playlist_action_failed_hint),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        FilledTonalButton(onClick = onRetry) { Text(stringResource(R.string.retry)) }
+                    }
+                }
+                playlists.isEmpty() -> Column(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = NavaSpacing.Xxl),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+                ) {
+                    Surface(
+                        modifier = Modifier.size(72.dp),
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Outlined.PlaylistAdd, contentDescription = null, modifier = Modifier.size(34.dp))
+                        }
+                    }
+                    Text(stringResource(R.string.no_playlists_for_track), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        stringResource(R.string.no_playlists_for_track_hint),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+                else -> LazyColumn(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                    verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+                ) {
+                    items(playlists, key = UserPlaylist::id) { playlist ->
+                        Surface(
+                            onClick = { onPlaylistSelected(playlist) },
+                            shape = MaterialTheme.shapes.large,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Sm),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+                            ) {
+                                PlaylistArtwork(playlist.coverImageUrl, playlist.title, Modifier.size(62.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        playlist.title,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        stringResource(
+                                            if (playlist.isPublic) R.string.public_playlist_summary else R.string.private_playlist_summary,
+                                            playlist.trackCount.toLong(),
+                                        ),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Icon(Icons.Outlined.Add, contentDescription = stringResource(R.string.add_to_playlist))
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(NavaSpacing.Sm))
+        }
+    }
+}
+
+@Composable
 private fun FullPlayer(
     nowPlaying: NowPlaying,
     playbackSpeed: Float,
@@ -790,6 +972,7 @@ private fun FullPlayer(
     isLiked: Boolean,
     isDownloaded: Boolean,
     isDownloading: Boolean,
+    downloadProgressPercent: Int?,
     fftBands: FloatArray,
     onDismiss: () -> Unit,
     onToggle: () -> Unit,
@@ -800,6 +983,7 @@ private fun FullPlayer(
     onCycleRepeat: () -> Unit,
     onToggleLike: () -> Unit,
     onDownload: () -> Unit,
+    onAddToPlaylist: () -> Unit,
     onShare: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
@@ -838,7 +1022,14 @@ private fun FullPlayer(
                     .navigationBarsPadding()
                     .padding(horizontal = NavaSpacing.Xl),
             ) {
-                PlayerHeader(onDismiss = onDismiss, onShare = onShare)
+                PlayerHeader(
+                    speedLabel = speedLabel,
+                    sleepTimerMinutes = sleepTimerMinutes,
+                    onDismiss = onDismiss,
+                    onCycleSpeed = onCycleSpeed,
+                    onCycleSleepTimer = onCycleSleepTimer,
+                    onShare = onShare,
+                )
                 Column(
                     modifier = Modifier
                         .weight(1f)
@@ -948,50 +1139,15 @@ private fun FullPlayer(
                         onToggle = onToggle,
                         onNext = onNext,
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
-                    ) {
-                        PlayerUtilityButton(
-                            icon = if (isLiked) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
-                            label = stringResource(if (isLiked) R.string.liked else R.string.like_song),
-                            onClick = onToggleLike,
-                            selected = isLiked,
-                            modifier = Modifier.weight(1f),
-                        )
-                        PlayerUtilityButton(
-                            icon = if (isDownloaded) Icons.Outlined.DownloadDone else Icons.Outlined.Download,
-                            label = stringResource(
-                                when {
-                                    isDownloaded -> R.string.downloaded
-                                    isDownloading -> R.string.downloading
-                                    else -> R.string.download
-                                },
-                            ),
-                            onClick = onDownload,
-                            selected = isDownloaded,
-                            enabled = !isDownloaded && !isDownloading,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
-                    ) {
-                        PlayerUtilityButton(
-                            icon = Icons.Outlined.Speed,
-                            label = stringResource(R.string.playback_speed_value, speedLabel),
-                            onClick = onCycleSpeed,
-                            modifier = Modifier.weight(1f),
-                        )
-                        PlayerUtilityButton(
-                            icon = Icons.Outlined.Timer,
-                            label = sleepTimerMinutes?.let { stringResource(R.string.sleep_timer_minutes, it) }
-                                ?: stringResource(R.string.sleep_timer_off),
-                            onClick = onCycleSleepTimer,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
+                    PlayerLibraryActions(
+                        isLiked = isLiked,
+                        isDownloaded = isDownloaded,
+                        isDownloading = isDownloading,
+                        downloadProgressPercent = downloadProgressPercent,
+                        onToggleLike = onToggleLike,
+                        onAddToPlaylist = onAddToPlaylist,
+                        onDownload = onDownload,
+                    )
                 }
             }
         }
@@ -999,7 +1155,14 @@ private fun FullPlayer(
 }
 
 @Composable
-private fun PlayerHeader(onDismiss: () -> Unit, onShare: () -> Unit) {
+private fun PlayerHeader(
+    speedLabel: String,
+    sleepTimerMinutes: Long?,
+    onDismiss: () -> Unit,
+    onCycleSpeed: () -> Unit,
+    onCycleSleepTimer: () -> Unit,
+    onShare: () -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth().height(NavaDimensions.PlayerSecondaryControlSize),
         verticalAlignment = Alignment.CenterVertically,
@@ -1018,13 +1181,48 @@ private fun PlayerHeader(onDismiss: () -> Unit, onShare: () -> Unit) {
             color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center,
         )
-        IconButton(onClick = onShare, modifier = Modifier.size(NavaDimensions.PlayerSecondaryControlSize)) {
-            Icon(
-                Icons.Outlined.Share,
+        Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
+            PlayerTopActionButton(
+                contentDescription = stringResource(R.string.playback_speed_value, speedLabel),
+                onClick = onCycleSpeed,
+            ) {
+                Text("${speedLabel}×", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            }
+            PlayerTopActionButton(
+                contentDescription = sleepTimerMinutes?.let { stringResource(R.string.sleep_timer_minutes, it) }
+                    ?: stringResource(R.string.sleep_timer_off),
+                selected = sleepTimerMinutes != null,
+                onClick = onCycleSleepTimer,
+            ) {
+                Icon(Icons.Outlined.Timer, contentDescription = null, modifier = Modifier.size(NavaSpacing.Xl))
+            }
+            PlayerTopActionButton(
                 contentDescription = stringResource(R.string.share_track),
-                modifier = Modifier.size(NavaSpacing.Xl),
-            )
+                onClick = onShare,
+            ) {
+                Icon(Icons.Outlined.Share, contentDescription = null, modifier = Modifier.size(NavaSpacing.Xl))
+            }
         }
+    }
+}
+
+@Composable
+private fun PlayerTopActionButton(
+    contentDescription: String,
+    onClick: () -> Unit,
+    selected: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .size(42.dp)
+            .semantics { this.contentDescription = contentDescription },
+        shape = CircleShape,
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .82f),
+        contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+    ) {
+        Box(contentAlignment = Alignment.Center) { content() }
     }
 }
 
@@ -1120,31 +1318,159 @@ private fun PlayerControlButton(
 }
 
 @Composable
-private fun PlayerUtilityButton(
+private fun PlayerLibraryActions(
+    isLiked: Boolean,
+    isDownloaded: Boolean,
+    isDownloading: Boolean,
+    downloadProgressPercent: Int?,
+    onToggleLike: () -> Unit,
+    onAddToPlaylist: () -> Unit,
+    onDownload: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.Top,
+    ) {
+        PlayerRoundActionButton(
+            icon = if (isLiked) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
+            label = stringResource(if (isLiked) R.string.liked else R.string.like_song),
+            onClick = onToggleLike,
+            selected = isLiked,
+            modifier = Modifier.weight(1f),
+        )
+        PlayerRoundActionButton(
+            icon = Icons.Outlined.PlaylistAdd,
+            label = stringResource(R.string.add_to_playlist),
+            onClick = onAddToPlaylist,
+            primary = true,
+            modifier = Modifier.weight(1f),
+        )
+        PlayerDownloadAction(
+            isDownloaded = isDownloaded,
+            isDownloading = isDownloading,
+            progressPercent = downloadProgressPercent,
+            onClick = onDownload,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun PlayerRoundActionButton(
     icon: ImageVector,
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     selected: Boolean = false,
-    enabled: Boolean = true,
+    primary: Boolean = false,
 ) {
-    Surface(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier.height(NavaDimensions.PlayerUtilityControlHeight),
-        shape = MaterialTheme.shapes.medium,
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs),
     ) {
-        Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = NavaSpacing.Md),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
+        Surface(
+            onClick = onClick,
+            modifier = Modifier.size(if (primary) 70.dp else 62.dp),
+            shape = CircleShape,
+            color = when {
+                primary -> MaterialTheme.colorScheme.primary
+                selected -> MaterialTheme.colorScheme.primaryContainer
+                else -> MaterialTheme.colorScheme.surfaceContainerHigh
+            },
+            contentColor = when {
+                primary -> MaterialTheme.colorScheme.onPrimary
+                selected -> MaterialTheme.colorScheme.onPrimaryContainer
+                else -> MaterialTheme.colorScheme.onSurface
+            },
         ) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(NavaSpacing.Xl))
-            Spacer(Modifier.size(NavaSpacing.Sm))
-            Text(label, style = MaterialTheme.typography.labelLarge)
+            Box(contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = label, modifier = Modifier.size(if (primary) 30.dp else NavaSpacing.Xl))
+            }
         }
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+        )
+    }
+}
+
+@Composable
+private fun PlayerDownloadAction(
+    isDownloaded: Boolean,
+    isDownloading: Boolean,
+    progressPercent: Int?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val targetProgress = when {
+        isDownloaded -> 1f
+        isDownloading -> ((progressPercent ?: 0) / 100f).coerceIn(.025f, 1f)
+        else -> 0f
+    }
+    val animatedProgress by animateFloatAsState(
+        targetValue = targetProgress,
+        animationSpec = tween(NavaMotion.Fast),
+        label = "downloadRingProgress",
+    )
+    val ringTrackColor = MaterialTheme.colorScheme.outlineVariant
+    val ringProgressColor = MaterialTheme.colorScheme.primary
+    val label = when {
+        isDownloaded -> stringResource(R.string.downloaded)
+        isDownloading -> stringResource(R.string.download_progress, progressPercent ?: 0)
+        else -> stringResource(R.string.download)
+    }
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs),
+    ) {
+        Box(modifier = Modifier.size(70.dp), contentAlignment = Alignment.Center) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val strokeWidth = 4.dp.toPx()
+                drawCircle(
+                    color = ringTrackColor,
+                    style = Stroke(width = strokeWidth),
+                    radius = size.minDimension / 2f - strokeWidth,
+                )
+                if (animatedProgress > 0f) {
+                    drawArc(
+                        color = ringProgressColor,
+                        startAngle = -90f,
+                        sweepAngle = 360f * animatedProgress,
+                        useCenter = false,
+                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                    )
+                }
+            }
+            Surface(
+                onClick = onClick,
+                enabled = !isDownloaded && !isDownloading,
+                modifier = Modifier.size(58.dp),
+                shape = CircleShape,
+                color = if (isDownloaded) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                contentColor = if (isDownloaded) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        if (isDownloaded) Icons.Outlined.DownloadDone else Icons.Outlined.Download,
+                        contentDescription = label,
+                        modifier = Modifier.size(NavaSpacing.Xl),
+                    )
+                }
+            }
+        }
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+        )
     }
 }
 

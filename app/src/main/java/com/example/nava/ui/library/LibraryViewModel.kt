@@ -86,9 +86,15 @@ data class LibraryUiState(
 
     fun addTrack(trackId: String) {
         val playlistId = _state.value.selectedPlaylist?.playlist?.id ?: return
-        mutate {
+        addTrackToPlaylist(playlistId, trackId)
+    }
+
+    fun addTrackToPlaylist(playlistId: String, trackId: String, onResult: (Boolean) -> Unit = {}) {
+        mutate(onResult = onResult) {
             repository.addTrack(playlistId, trackId).getOrThrow()
-            refreshSelected(playlistId)
+            if (_state.value.selectedPlaylist?.playlist?.id == playlistId) {
+                refreshSelected(playlistId)
+            }
             refreshSummary()
         }
     }
@@ -104,11 +110,17 @@ data class LibraryUiState(
 
     fun clearOperationError() = _state.update { it.copy(operationFailed = false) }
 
-    private fun mutate(block: suspend () -> Unit) = viewModelScope.launch {
+    private fun mutate(onResult: (Boolean) -> Unit = {}, block: suspend () -> Unit) = viewModelScope.launch {
         _state.update { it.copy(busy = true, operationFailed = false) }
         runCatching { block() }.fold(
-            onSuccess = { _state.update { it.copy(busy = false) } },
-            onFailure = { _state.update { it.copy(busy = false, operationFailed = true) } },
+            onSuccess = {
+                _state.update { it.copy(busy = false) }
+                onResult(true)
+            },
+            onFailure = {
+                _state.update { it.copy(busy = false, operationFailed = true) }
+                onResult(false)
+            },
         )
     }
 
