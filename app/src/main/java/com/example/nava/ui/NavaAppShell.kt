@@ -511,6 +511,7 @@ fun NavaAppShell(
             },
             onOpenPeople = {
                 shareCandidate = null
+                playerExpanded = false
                 socialInitialSection = SocialSection.PEOPLE
                 socialOpen = true
             },

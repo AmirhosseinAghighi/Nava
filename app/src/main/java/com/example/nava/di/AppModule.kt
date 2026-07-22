@@ -2,6 +2,9 @@ package com.example.nava.di
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
+import com.example.nava.data.chat.CachedChatMessageDao
 import com.example.nava.data.downloads.NavaDatabase
 import com.example.nava.data.downloads.OfflineTrackDao
 import com.example.nava.data.auth.SupabaseAuthRepository
@@ -37,6 +40,35 @@ abstract class RepositoryModule {
 @InstallIn(SingletonComponent::class)
 object ContextModule {
     @Provides @Singleton fun provideContext(@ApplicationContext context: Context): Context = context
-    @Provides @Singleton fun provideDatabase(context: Context): NavaDatabase = Room.databaseBuilder(context, NavaDatabase::class.java, "nava.db").build()
+    @Provides @Singleton fun provideDatabase(context: Context): NavaDatabase =
+        Room.databaseBuilder(context, NavaDatabase::class.java, "nava.db")
+            .addMigrations(MIGRATION_1_2)
+            .build()
     @Provides fun provideOfflineTrackDao(database: NavaDatabase): OfflineTrackDao = database.offlineTrackDao()
+    @Provides fun provideCachedChatMessageDao(database: NavaDatabase): CachedChatMessageDao = database.cachedChatMessageDao()
+
+    private val MIGRATION_1_2 = object : Migration(1, 2) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                create table if not exists cached_chat_messages (
+                    cacheId text not null primary key,
+                    accountId text not null,
+                    conversationId text not null,
+                    messageId text not null,
+                    senderId text not null,
+                    senderName text not null,
+                    body text,
+                    sharedTrackId text,
+                    sharedTrackTitle text,
+                    sharedTrackArtist text,
+                    sharedTrackCoverUrl text,
+                    createdAt text not null,
+                    status text not null,
+                    isMine integer not null
+                )
+                """.trimIndent(),
+            )
+        }
+    }
 }
