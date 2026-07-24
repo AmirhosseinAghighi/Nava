@@ -44,6 +44,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
@@ -172,6 +176,7 @@ import com.example.nava.domain.preferences.ThemeMode
 import com.example.nava.domain.preferences.UserPreferences
 import com.example.nava.ui.theme.NavaDimensions
 import com.example.nava.ui.theme.NavaBlack
+import com.example.nava.ui.theme.NavaGold
 import com.example.nava.ui.theme.NavaSpacing
 import com.example.nava.ui.theme.NavaWhite
 import com.example.nava.ui.home.HomeUiState
@@ -1859,9 +1864,11 @@ private fun LibraryShell(
     onTrackClick: (HomeTrack) -> Unit,
     onTrackOptions: (HomeTrack) -> Unit,
     viewModel: LibraryViewModel = hiltViewModel(),
+    catalogViewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
     val likes by likesViewModel.state.collectAsState()
+    val catalogState by catalogViewModel.uiState.collectAsState()
     var editorOpen by remember { mutableStateOf(false) }
     var editorPlaylist by remember { mutableStateOf<UserPlaylist?>(null) }
     var deleteCandidate by remember { mutableStateOf<UserPlaylist?>(null) }
@@ -1900,6 +1907,10 @@ private fun LibraryShell(
             else -> PlaylistOverviewScreen(
                 playlists = state.summary.playlists,
                 likedCount = likes.songs.size,
+                globalTracks = (catalogState as? HomeUiState.Content)?.feed?.global.orEmpty(),
+                localTracks = (catalogState as? HomeUiState.Content)?.feed?.local.orEmpty(),
+                catalogLoading = catalogState == HomeUiState.Loading,
+                catalogFailed = catalogState == HomeUiState.Error,
                 onCreate = {
                     editorPlaylist = null
                     editorOpen = true
@@ -1909,6 +1920,8 @@ private fun LibraryShell(
                     editorPlaylist = it
                     editorOpen = true
                 },
+                onCatalogRetry = catalogViewModel::reload,
+                onCatalogTrackClick = onTrackClick,
             )
         }
         if (state.busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter))
@@ -2024,21 +2037,29 @@ private fun LibraryShell(
 private fun PlaylistOverviewScreen(
     playlists: List<UserPlaylist>,
     likedCount: Int,
+    globalTracks: List<HomeTrack>,
+    localTracks: List<HomeTrack>,
+    catalogLoading: Boolean,
+    catalogFailed: Boolean,
     onCreate: () -> Unit,
     onOpen: (String) -> Unit,
     onEdit: (UserPlaylist) -> Unit,
+    onCatalogRetry: () -> Unit,
+    onCatalogTrackClick: (HomeTrack) -> Unit,
 ) {
-    LazyColumn(
+    LazyVerticalGrid(
         modifier = Modifier.fillMaxSize(),
+        columns = GridCells.Fixed(2),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(
             start = NavaSpacing.Lg,
             end = NavaSpacing.Lg,
             top = NavaSpacing.Lg,
             bottom = NavaSpacing.Xxl,
         ),
+        horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
         verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
     ) {
-        item {
+        item(span = { GridItemSpan(maxLineSpan) }) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(stringResource(R.string.library_title), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
@@ -2057,38 +2078,133 @@ private fun PlaylistOverviewScreen(
         }
         item {
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().height(136.dp),
                 shape = MaterialTheme.shapes.large,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Lg),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(NavaSpacing.Md),
+                    verticalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(56.dp)) {
+                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp)) {
                         Icon(
                             Icons.Outlined.Favorite,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.padding(NavaSpacing.Md),
+                            modifier = Modifier.padding(NavaSpacing.Sm),
                         )
                     }
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.liked_songs), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Column {
+                        Text(stringResource(R.string.liked_songs), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text(stringResource(R.string.track_count, likedCount.toLong()), color = MaterialTheme.colorScheme.onPrimaryContainer)
                     }
                 }
             }
         }
         item {
-            Text(stringResource(R.string.your_playlists), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Card(
+                onClick = onCreate,
+                modifier = Modifier.fillMaxWidth().height(136.dp),
+                shape = MaterialTheme.shapes.large,
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF315B5A)),
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(NavaSpacing.Md),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Surface(shape = CircleShape, color = NavaGold, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.Outlined.PlaylistAdd, contentDescription = null, tint = NavaBlack, modifier = Modifier.padding(NavaSpacing.Sm))
+                    }
+                    Column {
+                        Text(stringResource(R.string.new_playlist), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = NavaWhite)
+                        Text(stringResource(R.string.create_playlist), color = NavaWhite.copy(alpha = .78f))
+                    }
+                }
+            }
+        }
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Text(stringResource(R.string.world_music), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+        when {
+            catalogLoading -> item(span = { GridItemSpan(maxLineSpan) }) {
+                Box(Modifier.fillMaxWidth().padding(NavaSpacing.Lg), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            }
+            catalogFailed -> item(span = { GridItemSpan(maxLineSpan) }) {
+                Card(
+                    onClick = onCatalogRetry,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Md),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(stringResource(R.string.library_catalog_error), color = MaterialTheme.colorScheme.onErrorContainer)
+                        Text(stringResource(R.string.retry), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            globalTracks.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }) {
+                Text(stringResource(R.string.playlist_section_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        gridItems(globalTracks, key = { "global-${it.id}" }) { track ->
+            CatalogPlaylistCard(track, Color(0xFF4E3B83)) { onCatalogTrackClick(track) }
+        }
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Text(stringResource(R.string.local_music), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+        if (!catalogLoading && !catalogFailed && localTracks.isEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Text(stringResource(R.string.playlist_section_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        gridItems(localTracks, key = { "local-${it.id}" }) { track ->
+            CatalogPlaylistCard(track, Color(0xFF8A4D24)) { onCatalogTrackClick(track) }
+        }
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Text(stringResource(R.string.user_playlists), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         }
         if (playlists.isEmpty()) {
-            item { EmptyPlaylistsCard(onCreate) }
+            item(span = { GridItemSpan(maxLineSpan) }) { EmptyPlaylistsCard(onCreate) }
         } else {
-            items(playlists, key = UserPlaylist::id) { playlist ->
+            gridItems(playlists, key = UserPlaylist::id) { playlist ->
                 UserPlaylistCard(playlist, onOpen = { onOpen(playlist.id) }, onEdit = { onEdit(playlist) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun CatalogPlaylistCard(track: HomeTrack, accent: Color, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = accent),
+    ) {
+        Column {
+            Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
+                AsyncImage(
+                    model = track.coverImageUrl,
+                    contentDescription = stringResource(R.string.track_artwork, track.title),
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                Surface(
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(NavaSpacing.Sm).size(40.dp),
+                    shape = CircleShape,
+                    color = NavaGold,
+                    contentColor = NavaBlack,
+                ) {
+                    Icon(Icons.Outlined.PlayArrow, contentDescription = null, modifier = Modifier.padding(NavaSpacing.Sm))
+                }
+            }
+            Column(modifier = Modifier.padding(NavaSpacing.Md), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
+                Text(track.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Bold, color = NavaWhite)
+                Text(track.artistName, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = NavaWhite.copy(alpha = .78f))
             }
         }
     }
@@ -2125,31 +2241,36 @@ private fun UserPlaylistCard(playlist: UserPlaylist, onOpen: () -> Unit, onEdit:
         onClick = onOpen,
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF283E67)),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Sm),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
-        ) {
-            PlaylistArtwork(playlist.coverImageUrl, playlist.title, Modifier.size(82.dp))
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
-                Text(playlist.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column {
+            Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
+                PlaylistArtwork(playlist.coverImageUrl, playlist.title, Modifier.fillMaxSize())
+                IconButton(
+                    onClick = onEdit,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(NavaSpacing.Xs)
+                        .background(NavaBlack.copy(alpha = .58f), CircleShape),
+                ) {
+                    Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.edit_playlist), tint = NavaWhite)
+                }
+            }
+            Column(modifier = Modifier.padding(NavaSpacing.Md), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
+                Text(playlist.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = NavaWhite, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 playlist.description?.let {
-                    Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = NavaWhite.copy(alpha = .72f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm), verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         if (playlist.isPublic) Icons.Outlined.Public else Icons.Outlined.Lock,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = NavaGold,
                     )
-                    Text(stringResource(R.string.track_count, playlist.trackCount.toLong()), style = MaterialTheme.typography.labelLarge)
+                    Text(stringResource(R.string.track_count, playlist.trackCount.toLong()), style = MaterialTheme.typography.labelLarge, color = NavaWhite)
                 }
             }
-            IconButton(onClick = onEdit) { Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.edit_playlist)) }
-            Icon(Icons.Outlined.ChevronRight, contentDescription = null)
         }
     }
 }
@@ -3223,6 +3344,17 @@ private fun DownloadsShell(
     viewModel: DownloadViewModel,
     onPlay: (OfflineTrackEntity) -> Unit,
 ) {
+    var selectedSort by remember { mutableStateOf(DownloadSort.Newest) }
+    val sortedDownloads = remember(state.downloads, selectedSort) {
+        when (selectedSort) {
+            DownloadSort.Newest -> state.downloads.sortedByDescending(OfflineTrackEntity::downloadedAt)
+            DownloadSort.Oldest -> state.downloads.sortedBy(OfflineTrackEntity::downloadedAt)
+            DownloadSort.Name -> state.downloads.sortedBy { it.title.lowercase() }
+            DownloadSort.Artist -> state.downloads.sortedWith(
+                compareBy<OfflineTrackEntity> { it.artistName.lowercase() }.thenBy { it.title.lowercase() },
+            )
+        }
+    }
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(
@@ -3253,7 +3385,25 @@ private fun DownloadsShell(
             }
             if (state.downloads.isNotEmpty()) {
                 item { Text(stringResource(R.string.available_offline), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
-                items(state.downloads, key = OfflineTrackEntity::trackId) { track ->
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
+                        Text(
+                            stringResource(R.string.sort_downloads_by),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                            items(DownloadSort.entries, key = DownloadSort::name) { sort ->
+                                FilterChip(
+                                    selected = sort == selectedSort,
+                                    onClick = { selectedSort = sort },
+                                    label = { Text(stringResource(sort.label)) },
+                                )
+                            }
+                        }
+                    }
+                }
+                items(sortedDownloads, key = OfflineTrackEntity::trackId) { track ->
                     val dismissState = rememberSwipeToDismissBoxState(confirmValueChange = { value ->
                         if (value == SwipeToDismissBoxValue.EndToStart) {
                             viewModel.remove(track)
@@ -3298,6 +3448,13 @@ private fun DownloadsShell(
             }
         }
     }
+}
+
+private enum class DownloadSort(@StringRes val label: Int) {
+    Newest(R.string.sort_newest),
+    Oldest(R.string.sort_oldest),
+    Name(R.string.sort_name),
+    Artist(R.string.sort_artist),
 }
 
 @Composable

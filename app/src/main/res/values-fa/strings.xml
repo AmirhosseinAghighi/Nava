@@ -222,6 +222,11 @@
     <string name="playlist_library_subtitle">برای هر حال‌وهوا مجموعه‌ای بسازید و موسیقی‌هایتان را مرتب نگه دارید.</string>
     <string name="liked_songs">آهنگ‌های پسندیده</string>
     <string name="your_playlists">پلی‌لیست‌های شما</string>
+    <string name="world_music">موسیقی جهان</string>
+    <string name="local_music">موسیقی داخلی</string>
+    <string name="user_playlists">پلی‌لیست‌های کاربر</string>
+    <string name="playlist_section_empty">هنوز مجموعه‌ای در این بخش وجود ندارد.</string>
+    <string name="library_catalog_error">مجموعه‌های نوا بارگیری نشدند.</string>
     <string name="new_playlist">پلی‌لیست جدید</string>
     <string name="create_playlist">ساخت پلی‌لیست</string>
     <string name="edit_playlist">ویرایش پلی‌لیست</string>
@@ -266,6 +271,11 @@
     <string name="downloads_subtitle">موسیقی شما، همیشه آماده؛ حتی بدون اینترنت.</string>
     <string name="downloading_now">در حال دانلود</string>
     <string name="available_offline">قابل پخش آفلاین</string>
+    <string name="sort_downloads_by">مرتب‌سازی دانلودها</string>
+    <string name="sort_newest">جدیدترین</string>
+    <string name="sort_oldest">قدیمی‌ترین</string>
+    <string name="sort_name">نام آهنگ</string>
+    <string name="sort_artist">خواننده</string>
     <string name="swipe_to_remove">برای حذف بکشید</string>
     <string name="downloads_empty_title">هنوز موسیقی آفلاینی ندارید</string>
     <string name="downloads_empty_hint">از منوی آهنگ آن را دانلود کنید تا برای پخش آفلاین اینجا نمایش داده شود.</string>

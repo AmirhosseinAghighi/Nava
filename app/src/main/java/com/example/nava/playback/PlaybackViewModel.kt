@@ -62,6 +62,8 @@ class PlaybackViewModel @Inject constructor(
     private val playbackHistory = mutableListOf<HomeTrack>()
     private var sleepTimerResetJob: Job? = null
     private var isAdvancing = false
+    private var crossfadeRequestedFor: String? = null
+    private var crossfadeTrack: HomeTrack? = null
     private var lastRecordedProgressMs = 0L
     private val playbackStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -69,6 +71,7 @@ class PlaybackViewModel @Inject constructor(
                 NavaPlaybackService.ACTION_SKIP_NEXT -> skipToNext()
                 NavaPlaybackService.ACTION_SKIP_PREVIOUS -> skipToPrevious()
                 NavaPlaybackService.ACTION_PLAYBACK_STATE -> updatePlaybackState(intent)
+                NavaPlaybackService.ACTION_CROSSFADE_COMPLETE -> completeCrossfade()
                 NavaPlaybackService.ACTION_FFT_DATA -> intent
                     .getFloatArrayExtra(NavaPlaybackService.EXTRA_FFT_BANDS)
                     ?.takeIf { it.size == FFT_BAND_COUNT }
@@ -86,6 +89,7 @@ class PlaybackViewModel @Inject constructor(
                 positionMs = positionMs,
                 durationMs = intent.getLongExtra(NavaPlaybackService.EXTRA_DURATION_MS, current.durationMs),
             )
+            maybeStartCrossfade(current, positionMs, _nowPlaying.value?.durationMs ?: 0L)
             when {
                 playbackState == androidx.media3.common.Player.STATE_ENDED -> {
                     recordEvent(current.track.id, "completed", positionMs)
@@ -108,6 +112,7 @@ class PlaybackViewModel @Inject constructor(
                 addAction(NavaPlaybackService.ACTION_SKIP_NEXT)
                 addAction(NavaPlaybackService.ACTION_SKIP_PREVIOUS)
                 addAction(NavaPlaybackService.ACTION_FFT_DATA)
+                addAction(NavaPlaybackService.ACTION_CROSSFADE_COMPLETE)
             },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
@@ -153,20 +158,11 @@ class PlaybackViewModel @Inject constructor(
 
     private suspend fun playTrack(track: HomeTrack, localAudioPath: String? = null): Boolean {
         runCatching {
-            localAudioPath
-                ?.let(::File)
-                ?.takeIf(File::exists)
-                ?.let(Uri::fromFile)
-                ?.toString()
-                ?: offlineDownloads.find(track.id)
-                ?.audioPath
-                ?.let(::File)
-                ?.takeIf(File::exists)
-                ?.let(Uri::fromFile)
-                ?.toString()
-                ?: resolver.resolve(track.audioUrl)
+            resolveAudioUrl(track, localAudioPath)
         }
             .onSuccess { url ->
+                crossfadeRequestedFor = null
+                crossfadeTrack = null
                 _playbackError.value = false
                 getApplication<Application>().startForegroundService(Intent(getApplication(), NavaPlaybackService::class.java).apply {
                     action = NavaPlaybackService.ACTION_PLAY_URI
@@ -182,6 +178,58 @@ class PlaybackViewModel @Inject constructor(
             }
             .onFailure { _playbackError.value = true }
         return false
+    }
+
+    private suspend fun resolveAudioUrl(track: HomeTrack, localAudioPath: String? = null): String =
+        localAudioPath
+            ?.let(::File)
+            ?.takeIf(File::exists)
+            ?.let(Uri::fromFile)
+            ?.toString()
+            ?: offlineDownloads.find(track.id)
+                ?.audioPath
+                ?.let(::File)
+                ?.takeIf(File::exists)
+                ?.let(Uri::fromFile)
+                ?.toString()
+            ?: resolver.resolve(track.audioUrl)
+
+    private fun maybeStartCrossfade(current: NowPlaying, positionMs: Long, durationMs: Long) {
+        if (
+            durationMs <= CROSSFADE_DURATION_MS ||
+            durationMs - positionMs > CROSSFADE_DURATION_MS ||
+            crossfadeRequestedFor == current.track.id ||
+            crossfadeTrack != null
+        ) return
+        val nextTrack = _userQueue.value.firstOrNull() ?: sourceTrackAfter(current.track) ?: return
+        crossfadeRequestedFor = current.track.id
+        viewModelScope.launch {
+            val url = runCatching { resolveAudioUrl(nextTrack) }.getOrNull()
+            if (url == null || _nowPlaying.value?.track?.id != current.track.id) {
+                if (_nowPlaying.value?.track?.id == current.track.id) crossfadeRequestedFor = null
+                return@launch
+            }
+            crossfadeTrack = nextTrack
+            getApplication<Application>().startForegroundService(Intent(getApplication(), NavaPlaybackService::class.java).apply {
+                action = NavaPlaybackService.ACTION_CROSSFADE_URI
+                putExtra(NavaPlaybackService.EXTRA_URI, url)
+                putExtra(NavaPlaybackService.EXTRA_TITLE, nextTrack.title)
+                putExtra(NavaPlaybackService.EXTRA_ARTIST, nextTrack.artistName)
+                putExtra(NavaPlaybackService.EXTRA_ARTWORK_URI, nextTrack.coverImageUrl)
+            })
+        }
+    }
+
+    private fun completeCrossfade() {
+        val nextTrack = crossfadeTrack ?: return
+        _nowPlaying.value = NowPlaying(nextTrack, true)
+        crossfadeTrack = null
+        crossfadeRequestedFor = null
+        lastRecordedProgressMs = 0L
+        recordEvent(nextTrack.id, "started", 0L)
+        if (_userQueue.value.firstOrNull()?.id == nextTrack.id) {
+            _userQueue.value = _userQueue.value.drop(1)
+        }
     }
 
     fun pause() {
@@ -322,6 +370,7 @@ class PlaybackViewModel @Inject constructor(
     private companion object {
         const val PROGRESS_REPORT_INTERVAL_MS = 30_000L
         const val RESTART_POSITION_MS = 5_000L
+        const val CROSSFADE_DURATION_MS = 5_000L
         const val REPEAT_GUARD_INTERVAL_MS = 300L
         const val FFT_BAND_COUNT = 28
         val SPEED_OPTIONS = listOf(0.75f, 1f, 1.25f, 1.5f, 2f)

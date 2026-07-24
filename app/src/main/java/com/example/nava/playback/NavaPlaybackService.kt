@@ -14,6 +14,7 @@ import android.os.Bundle
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import androidx.core.app.NotificationCompat
 import androidx.media3.common.AudioAttributes
@@ -49,6 +50,7 @@ import java.io.File
 @androidx.annotation.OptIn(UnstableApi::class)
 class NavaPlaybackService : MediaSessionService() {
     private lateinit var player: ExoPlayer
+    private var crossfadePlayer: ExoPlayer? = null
     private lateinit var cache: SimpleCache
     private val fftAnalyzer = PlaybackFftAnalyzer(::publishFftBands)
     private val fftAudioProcessor = TeeAudioProcessor(fftAnalyzer)
@@ -87,6 +89,9 @@ class NavaPlaybackService : MediaSessionService() {
     }
     private val sleepHandler = Handler(Looper.getMainLooper())
     private val stateHandler = Handler(Looper.getMainLooper())
+    private val crossfadeHandler = Handler(Looper.getMainLooper())
+    private var crossfadeStartedAt = 0L
+    private var crossfadeRunnable: Runnable? = null
     private val sleepRunnable = Runnable { player.pause() }
     private val stateTicker = object : Runnable {
         override fun run() {
@@ -104,6 +109,7 @@ class NavaPlaybackService : MediaSessionService() {
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
+            if (playbackState == Player.STATE_ENDED && crossfadePlayer != null) return
             publishPlaybackState()
         }
 
@@ -121,29 +127,32 @@ class NavaPlaybackService : MediaSessionService() {
         val sourceFactory = CacheDataSource.Factory()
             .setCache(cache)
             .setUpstreamDataSourceFactory(DefaultDataSource.Factory(this))
-        val renderersFactory = object : DefaultRenderersFactory(this) {
-            override fun buildAudioSink(
-                context: Context,
-                enableFloatOutput: Boolean,
-                enableAudioTrackPlaybackParams: Boolean,
-            ): AudioSink = DefaultAudioSink.Builder(context)
-                .setEnableFloatOutput(false)
-                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                .setAudioProcessors(arrayOf<AudioProcessor>(fftAudioProcessor))
-                .build()
-        }
-        player = ExoPlayer.Builder(this, renderersFactory)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(sourceFactory))
-            .build()
-            .apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(C.USAGE_MEDIA)
-                        .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                        .build(),
-                    true,
-                )
+        fun createPlayer(withAnalyzer: Boolean): ExoPlayer {
+            val renderersFactory = object : DefaultRenderersFactory(this) {
+                override fun buildAudioSink(
+                    context: Context,
+                    enableFloatOutput: Boolean,
+                    enableAudioTrackPlaybackParams: Boolean,
+                ): AudioSink = DefaultAudioSink.Builder(context)
+                    .setEnableFloatOutput(false)
+                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .setAudioProcessors(if (withAnalyzer) arrayOf<AudioProcessor>(fftAudioProcessor) else emptyArray())
+                    .build()
             }
+            return ExoPlayer.Builder(this, renderersFactory)
+                .setMediaSourceFactory(DefaultMediaSourceFactory(sourceFactory))
+                .build()
+                .apply {
+                    setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(C.USAGE_MEDIA)
+                            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                            .build(),
+                        true,
+                    )
+                }
+        }
+        player = createPlayer(withAnalyzer = true)
         player.addListener(playerListener)
         val previousButton = CommandButton.Builder(CommandButton.ICON_PREVIOUS)
             .setDisplayName(getString(R.string.previous_track))
@@ -163,6 +172,7 @@ class NavaPlaybackService : MediaSessionService() {
         val serviceResult = super.onStartCommand(intent, flags, startId)
         when (intent?.action) {
             ACTION_PLAY_URI -> intent.getStringExtra(EXTRA_URI)?.let { uri ->
+                cancelCrossfade()
                 startPlaybackForeground(intent.getStringExtra(EXTRA_TITLE))
                 currentTitle = intent.getStringExtra(EXTRA_TITLE)
                 currentArtist = intent.getStringExtra(EXTRA_ARTIST)
@@ -180,6 +190,14 @@ class NavaPlaybackService : MediaSessionService() {
                 )
                 player.prepare()
                 player.play()
+            }
+            ACTION_CROSSFADE_URI -> intent.getStringExtra(EXTRA_URI)?.let { uri ->
+                startCrossfade(
+                    uri = uri,
+                    title = intent.getStringExtra(EXTRA_TITLE),
+                    artist = intent.getStringExtra(EXTRA_ARTIST),
+                    artworkUri = intent.getStringExtra(EXTRA_ARTWORK_URI),
+                )
             }
             ACTION_PAUSE -> player.pause()
             ACTION_RESUME -> player.play()
@@ -200,6 +218,7 @@ class NavaPlaybackService : MediaSessionService() {
     override fun onDestroy() {
         sleepHandler.removeCallbacksAndMessages(null)
         stateHandler.removeCallbacksAndMessages(null)
+        cancelCrossfade()
         player.removeListener(playerListener)
         session?.run { player.release(); release() }
         session = null
@@ -208,6 +227,92 @@ class NavaPlaybackService : MediaSessionService() {
         stopForeground(Service.STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
+
+    private fun startCrossfade(uri: String, title: String?, artist: String?, artworkUri: String?) {
+        if (crossfadePlayer != null || !player.isPlaying) return
+        val incoming = createCrossfadePlayer()
+        crossfadePlayer = incoming
+        incoming.addListener(object : Player.Listener {
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                if (crossfadePlayer === incoming) cancelCrossfade()
+            }
+        })
+        incoming.volume = 0f
+        incoming.setMediaItem(mediaItem(uri, title, artist, artworkUri))
+        incoming.prepare()
+        incoming.play()
+        crossfadeStartedAt = SystemClock.elapsedRealtime()
+        val runnable = object : Runnable {
+            override fun run() {
+                val progress = ((SystemClock.elapsedRealtime() - crossfadeStartedAt).toFloat() / CROSSFADE_DURATION_MS).coerceIn(0f, 1f)
+                player.volume = 1f - progress
+                incoming.volume = progress
+                if (progress < 1f) crossfadeHandler.postDelayed(this, CROSSFADE_TICK_MS)
+                else finishCrossfade(incoming)
+            }
+        }
+        crossfadeRunnable = runnable
+        crossfadeHandler.post(runnable)
+    }
+
+    private fun createCrossfadePlayer(): ExoPlayer {
+        val renderersFactory = DefaultRenderersFactory(this)
+        return ExoPlayer.Builder(this, renderersFactory)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(
+                CacheDataSource.Factory()
+                    .setCache(cache)
+                    .setUpstreamDataSourceFactory(DefaultDataSource.Factory(this)),
+            ))
+            .build()
+            .apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(C.USAGE_MEDIA)
+                        .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                        .build(),
+                    false,
+                )
+            }
+    }
+
+    private fun finishCrossfade(incoming: ExoPlayer) {
+        if (crossfadePlayer !== incoming) return
+        crossfadeHandler.removeCallbacks(crossfadeRunnable ?: return)
+        crossfadeRunnable = null
+        player.removeListener(playerListener)
+        player.stop()
+        player.release()
+        player = incoming
+        player.volume = 1f
+        player.addListener(playerListener)
+        crossfadePlayer = null
+        session?.setPlayer(player)
+        publishPlaybackState()
+        sendBroadcast(Intent(ACTION_CROSSFADE_COMPLETE).setPackage(packageName))
+    }
+
+    private fun cancelCrossfade() {
+        crossfadeRunnable?.let(crossfadeHandler::removeCallbacks)
+        crossfadeRunnable = null
+        crossfadePlayer?.run {
+            stop()
+            release()
+        }
+        crossfadePlayer = null
+        if (::player.isInitialized) player.volume = 1f
+    }
+
+    private fun mediaItem(uri: String, title: String?, artist: String?, artworkUri: String?): MediaItem =
+        MediaItem.Builder()
+            .setUri(uri)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setArtist(artist)
+                    .setArtworkUri(artworkUri?.let(android.net.Uri::parse))
+                    .build(),
+            )
+            .build()
 
     @SuppressLint("MissingPermission")
     private fun startPlaybackForeground(title: String?) {
@@ -313,6 +418,8 @@ class NavaPlaybackService : MediaSessionService() {
         const val ACTION_FFT_DATA = "com.example.nava.playback.FFT_DATA"
         const val ACTION_SKIP_NEXT = "com.example.nava.playback.SKIP_NEXT"
         const val ACTION_SKIP_PREVIOUS = "com.example.nava.playback.SKIP_PREVIOUS"
+        const val ACTION_CROSSFADE_COMPLETE = "com.example.nava.playback.CROSSFADE_COMPLETE"
+        const val ACTION_CROSSFADE_URI = "com.example.nava.playback.CROSSFADE_URI"
         const val SESSION_COMMAND_NEXT = "com.example.nava.playback.SESSION_NEXT"
         const val SESSION_COMMAND_PREVIOUS = "com.example.nava.playback.SESSION_PREVIOUS"
         const val EXTRA_URI = "uri"
@@ -328,6 +435,8 @@ class NavaPlaybackService : MediaSessionService() {
         const val EXTRA_SPEED = "speed"
         const val EXTRA_SLEEP_MS = "sleep_ms"
         private const val STATE_TICK_INTERVAL_MS = 1_000L
+        private const val CROSSFADE_DURATION_MS = 5_000L
+        private const val CROSSFADE_TICK_MS = 50L
         private const val PLAYBACK_CHANNEL_ID = "nava_playback"
         private const val PLAYBACK_NOTIFICATION_ID = 1001
         private const val FFT_BAND_COUNT = 28

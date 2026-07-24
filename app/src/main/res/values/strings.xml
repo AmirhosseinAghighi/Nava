@@ -222,6 +222,11 @@
     <string name="playlist_library_subtitle">Create collections for every mood and keep your music organized.</string>
     <string name="liked_songs">Liked songs</string>
     <string name="your_playlists">Your playlists</string>
+    <string name="world_music">World music</string>
+    <string name="local_music">Local music</string>
+    <string name="user_playlists">User playlists</string>
+    <string name="playlist_section_empty">No collections are available in this section yet.</string>
+    <string name="library_catalog_error">Couldn’t load Nava collections.</string>
     <string name="new_playlist">New playlist</string>
     <string name="create_playlist">Create playlist</string>
     <string name="edit_playlist">Edit playlist</string>
@@ -266,6 +271,11 @@
     <string name="downloads_subtitle">Your music, ready anywhere — even without internet.</string>
     <string name="downloading_now">Downloading now</string>
     <string name="available_offline">Available offline</string>
+    <string name="sort_downloads_by">Sort downloads by</string>
+    <string name="sort_newest">Newest</string>
+    <string name="sort_oldest">Oldest</string>
+    <string name="sort_name">Name</string>
+    <string name="sort_artist">Artist</string>
     <string name="swipe_to_remove">Swipe to remove</string>
     <string name="downloads_empty_title">No offline music yet</string>
     <string name="downloads_empty_hint">Download a song from its menu and it will appear here for offline playback.</string>
