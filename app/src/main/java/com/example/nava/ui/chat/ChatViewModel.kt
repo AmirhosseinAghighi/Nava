@@ -1,5 +1,7 @@
 package com.example.nava.ui.chat
 
+import android.os.SystemClock
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.Pager
@@ -8,6 +10,7 @@ import androidx.paging.PagingData
 import androidx.paging.PagingSource
 import androidx.paging.PagingState
 import androidx.paging.cachedIn
+import com.example.nava.BuildConfig
 import com.example.nava.data.chat.CachedChatMessageDao
 import com.example.nava.data.chat.CachedChatMessageEntity
 import com.example.nava.domain.catalog.HomeTrack
@@ -25,8 +28,14 @@ import io.github.jan.supabase.realtime.broadcast
 import io.github.jan.supabase.realtime.broadcastFlow
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import io.github.jan.supabase.realtime.realtime
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.Flow
@@ -36,9 +45,13 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import java.time.Instant
 import java.util.UUID
@@ -91,14 +104,9 @@ class ChatViewModel @Inject constructor(
     private var inboxRealtimeJob: Job? = null
     private var inboxSyncJob: Job? = null
     private var inboxRefreshJob: Job? = null
-    private var activeChannel: RealtimeChannel? = null
-    private var liveMessagesJob: Job? = null
-    private var messageBroadcastJob: Job? = null
-    private var typingBroadcastJob: Job? = null
-    private var messageSyncJob: Job? = null
-    private var receiptJob: Job? = null
-    private var typingResetJob: Job? = null
-    private var remoteTypingResetJob: Job? = null
+    private var activeRealtimeSession: ConversationRealtimeSession? = null
+    private var conversationRequestSerial = 0L
+    private val realtimeLifecycleMutex = Mutex()
     private var activeMessagePagingSource: ChatMessagePagingSource? = null
     private val activeConversationId = MutableStateFlow<String?>(null)
     private val messageLoadMutex = Mutex()
@@ -159,31 +167,59 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    fun openConversation(conversation: ChatConversation) = viewModelScope.launch {
-        stopRealtime()
-        activeConversationId.value = conversation.id
-        _state.value = _state.value.copy(activeConversation = conversation, messages = emptyList(), loading = false, error = false)
-        runCatching { startRealtime(conversation) }
-            .onFailure { _state.value = _state.value.copy(error = true) }
+    fun openConversation(conversation: ChatConversation): Job {
+        val requestSerial = ++conversationRequestSerial
+        return viewModelScope.launch {
+            realtimeLifecycleMutex.withLock {
+                if (requestSerial != conversationRequestSerial) return@withLock
+                stopRealtimeLocked()
+                if (requestSerial != conversationRequestSerial) return@withLock
+
+                activeConversationId.value = conversation.id
+                _state.value = _state.value.copy(
+                    activeConversation = conversation,
+                    messages = emptyList(),
+                    draft = "",
+                    typingName = null,
+                    loading = false,
+                    error = false,
+                    offline = false,
+                )
+                try {
+                    startRealtime(conversation, requestSerial)
+                } catch (_: Throwable) {
+                    currentCoroutineContext().ensureActive()
+                    stopRealtimeLocked()
+                    if (requestSerial == conversationRequestSerial) {
+                        _state.value = _state.value.copy(loading = false, error = true)
+                    }
+                }
+            }
+        }
     }
 
     fun closeConversation() {
-        viewModelScope.launch { stopRealtime() }
+        val requestSerial = ++conversationRequestSerial
         activeConversationId.value = null
-        _state.value = _state.value.copy(activeConversation = null, messages = emptyList(), draft = "")
+        _state.value = _state.value.copy(
+            activeConversation = null,
+            messages = emptyList(),
+            draft = "",
+            typingName = null,
+        )
+        viewModelScope.launch {
+            realtimeLifecycleMutex.withLock {
+                if (requestSerial == conversationRequestSerial) stopRealtimeLocked()
+            }
+        }
         refreshInbox()
     }
 
     fun changeDraft(value: String) {
-        _state.value = _state.value.copy(draft = value.take(MAX_MESSAGE_LENGTH))
-        updateTyping(value.isNotBlank())
-        typingResetJob?.cancel()
-        if (value.isNotBlank()) {
-            typingResetJob = viewModelScope.launch {
-                delay(TYPING_IDLE_MS)
-                updateTyping(false)
-            }
-        }
+        val draft = value.take(MAX_MESSAGE_LENGTH)
+        _state.value = _state.value.copy(draft = draft)
+        val conversationId = _state.value.activeConversation?.id ?: return
+        activeSessionFor(conversationId)?.typingCoordinator?.draftChanged(draft.isNotBlank())
     }
 
     fun sendText() {
@@ -226,6 +262,7 @@ class ChatViewModel @Inject constructor(
         onSuccess: () -> Unit = {},
     ) = viewModelScope.launch {
         val currentUser = supabase.auth.currentUserOrNull()
+        val typingCoordinator = activeSessionFor(conversationId)?.typingCoordinator
         val pendingId = "pending:${UUID.randomUUID()}"
         val pendingMessage = currentUser
             ?.takeIf { _state.value.activeConversation?.id == conversationId }
@@ -250,6 +287,7 @@ class ChatViewModel @Inject constructor(
             sending = true,
             error = false,
         )
+        typingCoordinator?.stopTypingAndFlush()
         runCatching {
             supabase.postgrest.rpc(
                 "send_conversation_message",
@@ -260,10 +298,12 @@ class ChatViewModel @Inject constructor(
                 },
             )
         }.onSuccess {
-            _state.value = _state.value.copy(sending = false)
-            updateTyping(false)
+            _state.value = _state.value.copy(
+                messages = _state.value.messages.filterNot { it.id == pendingId },
+                sending = false,
+            )
             runCatching {
-                activeChannel?.broadcast(
+                activeSessionFor(conversationId)?.channel?.broadcast(
                     MESSAGE_EVENT,
                     MessageEvent(currentUser?.id.orEmpty()),
                 )
@@ -285,8 +325,11 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    private suspend fun loadMessages(conversationId: String) = messageLoadMutex.withLock {
-        if (_state.value.activeConversation?.id != conversationId) return@withLock
+    private suspend fun loadMessages(
+        conversationId: String,
+        expectedSessionSerial: Long? = null,
+    ) = messageLoadMutex.withLock {
+        if (!isExpectedConversationSession(conversationId, expectedSessionSerial)) return@withLock
         val currentUserId = supabase.auth.currentUserOrNull()?.id ?: return failLoading()
         try {
             val dtos = supabase.postgrest.rpc(
@@ -298,12 +341,14 @@ class ChatViewModel @Inject constructor(
                 runCatching { resolveSharedTrack(trackId).coverImageUrl }.getOrNull()
             }
             val messages = dtos.map { it.toMessage(currentUserId, coverUrls[it.trackId]) }
-            if (_state.value.activeConversation?.id != conversationId) return@withLock
+            if (!isExpectedConversationSession(conversationId, expectedSessionSerial)) return@withLock
             _state.value = _state.value.copy(messages = messages, loading = false, offline = false)
             cacheMessages(currentUserId, conversationId, messages)
             if (messages.any { !it.isMine && it.status != ChatMessageStatus.Read }) markRead(conversationId)
         } catch (_: Throwable) {
+            currentCoroutineContext().ensureActive()
             val localMessages = cachedMessages.getConversation(currentUserId, conversationId).map { it.toMessage() }
+            if (!isExpectedConversationSession(conversationId, expectedSessionSerial)) return@withLock
             _state.value = _state.value.copy(
                 messages = localMessages,
                 loading = false,
@@ -354,70 +399,80 @@ class ChatViewModel @Inject constructor(
     }
 
     private fun markRead(conversationId: String) = viewModelScope.launch {
+        val session = activeSessionFor(conversationId)
         runCatching {
             supabase.postgrest.rpc("mark_conversation_delivered", buildJsonObject { put("p_conversation_id", conversationId) })
             supabase.postgrest.rpc("mark_conversation_read", buildJsonObject { put("p_conversation_id", conversationId) })
-            activeChannel?.broadcast(RECEIPT_EVENT, ReceiptEvent(supabase.auth.currentUserOrNull()?.id.orEmpty()))
+            session
+                ?.takeIf(::isCurrentSession)
+                ?.channel
+                ?.broadcast(RECEIPT_EVENT, ReceiptEvent(supabase.auth.currentUserOrNull()?.id.orEmpty()))
         }.onSuccess { refreshInbox() }
     }
 
     private fun failLoading() { _state.value = _state.value.copy(loading = false, error = true) }
 
-    private suspend fun startRealtime(conversation: ChatConversation) {
-        val currentUser = supabase.auth.currentUserOrNull() ?: return
+    private suspend fun startRealtime(
+        conversation: ChatConversation,
+        sessionSerial: Long,
+    ): ConversationRealtimeSession {
+        val currentUser = checkNotNull(supabase.auth.currentUserOrNull()) {
+            "A signed-in user is required for conversation realtime"
+        }
         val channel = supabase.channel("conversation:${conversation.id}") {
             isPrivate = true
             broadcast { acknowledgeBroadcasts = true }
         }
-        activeChannel = channel
-        liveMessagesJob = viewModelScope.launch {
+        val typingCoordinator = TypingCoordinator(
+            sessionSerial = sessionSerial,
+            channel = channel,
+            event = TypingEvent(currentUser.id, currentUser.email ?: currentUser.id, false),
+        )
+        val session = ConversationRealtimeSession(
+            serial = sessionSerial,
+            conversation = conversation,
+            channel = channel,
+            currentUserId = currentUser.id,
+            typingCoordinator = typingCoordinator,
+        )
+        activeRealtimeSession = session
+
+        session.liveMessagesJob = viewModelScope.launch {
             channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") {
                 table = "conversation_messages"
                 filter("conversation_id", FilterOperator.EQ, conversation.id)
-            }.collect {
+            }.collect { change ->
+                if (!isCurrentSession(session)) return@collect
+                val senderId = change.record["sender_id"]?.jsonPrimitive?.contentOrNull
+                if (senderId != null && senderId != session.currentUserId) clearRemoteTyping(session)
                 activeMessagePagingSource?.invalidate()
                 refreshInbox()
             }
         }
-        messageBroadcastJob = viewModelScope.launch {
-            channel.broadcastFlow<MessageEvent>(MESSAGE_EVENT).collect { event ->
-                if (event.userId != currentUser.id) {
-                    activeMessagePagingSource?.invalidate()
-                    refreshInbox()
-                }
-            }
-        }
-        typingBroadcastJob = viewModelScope.launch {
-            channel.broadcastFlow<TypingEvent>(TYPING_EVENT).collect { event ->
-                if (event.userId != currentUser.id) {
-                    remoteTypingResetJob?.cancel()
-                    _state.value = _state.value.copy(
-                        typingName = if (event.isTyping) conversation.peerName else null,
-                    )
-                    if (event.isTyping) {
-                        remoteTypingResetJob = viewModelScope.launch {
-                            delay(REMOTE_TYPING_TIMEOUT_MS)
-                            if (_state.value.activeConversation?.id == conversation.id) {
-                                _state.value = _state.value.copy(typingName = null)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        receiptJob = viewModelScope.launch {
-            channel.broadcastFlow<ReceiptEvent>(RECEIPT_EVENT).collect { receipt ->
-                if (receipt.userId != currentUser.id) activeMessagePagingSource?.invalidate()
-            }
-        }
-        messageSyncJob = viewModelScope.launch {
-            while (isActive && _state.value.activeConversation?.id == conversation.id) {
+        session.messageSyncJob = viewModelScope.launch {
+            while (isActive && isCurrentSession(session)) {
                 delay(MESSAGE_SYNC_FALLBACK_MS)
                 activeMessagePagingSource?.invalidate()
             }
         }
-        channel.subscribe(blockUntilSubscribed = true)
-        markRead(conversation.id)
+        session.channelStatusJob = viewModelScope.launch {
+            var previousStatus: RealtimeChannel.Status? = null
+            channel.status.collect { status ->
+                if (!isCurrentSession(session)) return@collect
+                val becameSubscribed =
+                    status == RealtimeChannel.Status.SUBSCRIBED &&
+                        previousStatus != RealtimeChannel.Status.SUBSCRIBED
+                if (status != previousStatus) {
+                    debugLog("conversation session=${session.serial} connection=$status")
+                }
+                previousStatus = status
+                if (becameSubscribed) restartBroadcastCollectors(session)
+                session.typingCoordinator.channelStatusChanged(status)
+                if (becameSubscribed) markRead(conversation.id)
+            }
+        }
+        channel.subscribe(blockUntilSubscribed = false)
+        return session
     }
 
     private fun startInboxUpdates() = viewModelScope.launch {
@@ -440,40 +495,270 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    private fun updateTyping(isTyping: Boolean) = viewModelScope.launch {
-        _state.value.activeConversation ?: return@launch
-        val user = supabase.auth.currentUserOrNull() ?: return@launch
-        runCatching {
-            activeChannel
-                ?.takeIf { it.status.value == RealtimeChannel.Status.SUBSCRIBED }
-                ?.broadcast(
-                    TYPING_EVENT,
-                    TypingEvent(user.id, user.email ?: user.id, isTyping),
-                )
+    private fun activeSessionFor(conversationId: String): ConversationRealtimeSession? =
+        activeRealtimeSession?.takeIf { session ->
+            session.conversation.id == conversationId && isCurrentSession(session)
+        }
+
+    private fun restartBroadcastCollectors(session: ConversationRealtimeSession) {
+        session.messageBroadcastJob?.cancel()
+        session.typingBroadcastJob?.cancel()
+        session.receiptJob?.cancel()
+
+        session.messageBroadcastJob = viewModelScope.launch {
+            session.channel.broadcastFlow<MessageEvent>(MESSAGE_EVENT).collect { event ->
+                if (isCurrentSession(session) && event.userId != session.currentUserId) {
+                    clearRemoteTyping(session)
+                    activeMessagePagingSource?.invalidate()
+                    refreshInbox()
+                }
+            }
+        }
+        session.typingBroadcastJob = viewModelScope.launch {
+            session.channel.broadcastFlow<TypingEvent>(TYPING_EVENT).collect { event ->
+                if (isCurrentSession(session) && event.userId != session.currentUserId) {
+                    receiveRemoteTyping(session, event.isTyping)
+                }
+            }
+        }
+        session.receiptJob = viewModelScope.launch {
+            session.channel.broadcastFlow<ReceiptEvent>(RECEIPT_EVENT).collect { receipt ->
+                if (isCurrentSession(session) && receipt.userId != session.currentUserId) {
+                    activeMessagePagingSource?.invalidate()
+                }
+            }
         }
     }
 
-    private suspend fun stopRealtime() {
-        typingResetJob?.cancel()
-        remoteTypingResetJob?.cancel()
-        liveMessagesJob?.cancel()
-        messageBroadcastJob?.cancel()
-        typingBroadcastJob?.cancel()
-        messageSyncJob?.cancel()
-        receiptJob?.cancel()
-        activeChannel?.let { supabase.realtime.removeChannel(it) }
-        activeChannel = null
+    private fun isCurrentSession(session: ConversationRealtimeSession): Boolean =
+        activeRealtimeSession === session &&
+            conversationRequestSerial == session.serial &&
+            _state.value.activeConversation?.id == session.conversation.id
+
+    private fun isExpectedConversationSession(conversationId: String, expectedSessionSerial: Long?): Boolean {
+        if (_state.value.activeConversation?.id != conversationId) return false
+        return expectedSessionSerial == null || activeRealtimeSession?.serial == expectedSessionSerial
+    }
+
+    private fun receiveRemoteTyping(session: ConversationRealtimeSession, isTyping: Boolean) {
+        session.remoteTypingResetJob?.cancel()
+        session.remoteTypingResetJob = null
+        if (!isCurrentSession(session)) return
+        debugLog("conversation session=${session.serial} remote-typing=$isTyping")
+        _state.value = _state.value.copy(
+            typingName = if (isTyping) session.conversation.peerName else null,
+        )
+        if (isTyping) {
+            session.remoteTypingResetJob = viewModelScope.launch {
+                delay(REMOTE_TYPING_TIMEOUT_MS)
+                if (isCurrentSession(session)) {
+                    debugLog("conversation session=${session.serial} remote-typing=false reason=timeout")
+                    _state.value = _state.value.copy(typingName = null)
+                }
+            }
+        }
+    }
+
+    private fun clearRemoteTyping(session: ConversationRealtimeSession) {
+        session.remoteTypingResetJob?.cancel()
+        session.remoteTypingResetJob = null
+        if (isCurrentSession(session)) {
+            _state.value = _state.value.copy(typingName = null)
+        }
+    }
+
+    private suspend fun stopRealtimeLocked() {
+        val session = activeRealtimeSession ?: return
+        clearRemoteTyping(session)
+        session.typingCoordinator.shutdown()
+        session.liveMessagesJob?.cancel()
+        session.messageBroadcastJob?.cancel()
+        session.typingBroadcastJob?.cancel()
+        session.messageSyncJob?.cancel()
+        session.receiptJob?.cancel()
+        session.channelStatusJob?.cancel()
+        activeRealtimeSession = null
+        try {
+            supabase.realtime.removeChannel(session.channel)
+        } catch (_: Throwable) {
+            currentCoroutineContext().ensureActive()
+            debugLog("conversation session=${session.serial} channel teardown failed")
+        }
         _state.value = _state.value.copy(typingName = null)
         activeMessagePagingSource = null
     }
 
     override fun onCleared() {
+        conversationRequestSerial++
         inboxRealtimeJob?.cancel()
         inboxSyncJob?.cancel()
         inboxRefreshJob?.cancel()
         inboxChannel?.let { channel -> viewModelScope.launch { supabase.realtime.removeChannel(channel) } }
-        viewModelScope.launch { stopRealtime() }
+        activeRealtimeSession?.typingCoordinator?.requestStop()
+        viewModelScope.launch {
+            realtimeLifecycleMutex.withLock { stopRealtimeLocked() }
+        }
         super.onCleared()
+    }
+
+    private inner class ConversationRealtimeSession(
+        val serial: Long,
+        val conversation: ChatConversation,
+        val channel: RealtimeChannel,
+        val currentUserId: String,
+        val typingCoordinator: TypingCoordinator,
+    ) {
+        var liveMessagesJob: Job? = null
+        var messageBroadcastJob: Job? = null
+        var typingBroadcastJob: Job? = null
+        var messageSyncJob: Job? = null
+        var receiptJob: Job? = null
+        var channelStatusJob: Job? = null
+        var remoteTypingResetJob: Job? = null
+    }
+
+    private sealed interface TypingCommand {
+        data class DraftChanged(val isTyping: Boolean, val changedAtMs: Long) : TypingCommand
+        data class ChannelStatusChanged(val status: RealtimeChannel.Status) : TypingCommand
+        data class Stop(
+            val terminate: Boolean,
+            val completion: CompletableDeferred<Boolean>?,
+        ) : TypingCommand
+    }
+
+    private inner class TypingCoordinator(
+        private val sessionSerial: Long,
+        private val channel: RealtimeChannel,
+        event: TypingEvent,
+    ) {
+        private val typingEvent = event
+        private val commands = Channel<TypingCommand>(capacity = Channel.UNLIMITED)
+        private val job = viewModelScope.launch { runCoordinator() }
+
+        fun draftChanged(isTyping: Boolean) {
+            commands.trySend(
+                TypingCommand.DraftChanged(
+                    isTyping = isTyping,
+                    changedAtMs = SystemClock.elapsedRealtime(),
+                ),
+            )
+        }
+
+        fun channelStatusChanged(status: RealtimeChannel.Status) {
+            commands.trySend(TypingCommand.ChannelStatusChanged(status))
+        }
+
+        fun requestStop() {
+            commands.trySend(TypingCommand.Stop(terminate = false, completion = null))
+        }
+
+        suspend fun stopTypingAndFlush() {
+            stop(terminate = false)
+        }
+
+        suspend fun shutdown() {
+            stop(terminate = true)
+            job.cancelAndJoin()
+        }
+
+        private suspend fun stop(terminate: Boolean) {
+            val completion = CompletableDeferred<Boolean>()
+            if (!commands.trySend(TypingCommand.Stop(terminate, completion)).isSuccess) return
+            val completed = withTimeoutOrNull(TYPING_ACK_TIMEOUT_MS) {
+                completion.await()
+            }
+            if (completed != true) {
+                debugLog("conversation session=$sessionSerial typing=false acknowledgement failed")
+            }
+        }
+
+        private suspend fun runCoordinator() {
+            var desiredTyping = false
+            var subscribed = false
+            var idleDeadlineMs: Long? = null
+            var lastTrueSentAtMs: Long? = null
+
+            while (currentCoroutineContext().isActive) {
+                val now = SystemClock.elapsedRealtime()
+                val waitMs = idleDeadlineMs?.let { (it - now).coerceAtLeast(1L) }
+                val command = if (waitMs == null) {
+                    commands.receive()
+                } else {
+                    withTimeoutOrNull(waitMs) { commands.receive() }
+                }
+                val commandTime = SystemClock.elapsedRealtime()
+
+                if (desiredTyping && idleDeadlineMs?.let { commandTime >= it } == true) {
+                    desiredTyping = false
+                    idleDeadlineMs = null
+                    if (subscribed) broadcastTyping(false)
+                }
+
+                when (command) {
+                    null -> Unit
+                    is TypingCommand.DraftChanged -> {
+                        if (!command.isTyping || commandTime - command.changedAtMs >= TYPING_IDLE_MS) {
+                            val shouldSendStop = desiredTyping
+                            desiredTyping = false
+                            idleDeadlineMs = null
+                            if (subscribed && shouldSendStop) broadcastTyping(false)
+                        } else {
+                            val wasTyping = desiredTyping
+                            desiredTyping = true
+                            idleDeadlineMs = command.changedAtMs + TYPING_IDLE_MS
+                            val shouldRefresh = lastTrueSentAtMs
+                                ?.let { commandTime - it >= TYPING_REFRESH_MS }
+                                ?: true
+                            if (subscribed && (!wasTyping || shouldRefresh)) {
+                                if (broadcastTyping(true)) lastTrueSentAtMs = commandTime
+                            }
+                        }
+                    }
+                    is TypingCommand.ChannelStatusChanged -> {
+                        val wasSubscribed = subscribed
+                        subscribed = command.status == RealtimeChannel.Status.SUBSCRIBED
+                        if (!subscribed) {
+                            lastTrueSentAtMs = null
+                        } else if (!wasSubscribed && desiredTyping) {
+                            if (broadcastTyping(true)) {
+                                lastTrueSentAtMs = SystemClock.elapsedRealtime()
+                            }
+                        }
+                    }
+                    is TypingCommand.Stop -> {
+                        desiredTyping = false
+                        idleDeadlineMs = null
+                        val sent = !subscribed || broadcastTyping(false)
+                        command.completion?.complete(sent)
+                        if (command.terminate) return
+                    }
+                }
+            }
+        }
+
+        private suspend fun broadcastTyping(isTyping: Boolean): Boolean = try {
+            withTimeout(TYPING_ACK_TIMEOUT_MS) {
+                channel.broadcast(
+                    TYPING_EVENT,
+                    typingEvent.copy(isTyping = isTyping),
+                )
+            }
+            true
+        } catch (_: TimeoutCancellationException) {
+            debugLog("conversation session=$sessionSerial typing=$isTyping acknowledgement timed out")
+            false
+        } catch (failure: Throwable) {
+            currentCoroutineContext().ensureActive()
+            debugLog(
+                "conversation session=$sessionSerial typing=$isTyping acknowledgement failed " +
+                    "reason=${failure::class.simpleName}",
+            )
+            false
+        }
+    }
+
+    private fun debugLog(message: String) {
+        if (BuildConfig.DEBUG) Log.d(REALTIME_LOG_TAG, message)
     }
 
     @Serializable
@@ -598,11 +883,14 @@ class ChatViewModel @Inject constructor(
         const val MESSAGE_PREFETCH_DISTANCE = 10
         const val MAX_MESSAGE_LENGTH = 2_000
         const val TYPING_IDLE_MS = 1_200L
+        const val TYPING_REFRESH_MS = 1_000L
+        const val TYPING_ACK_TIMEOUT_MS = 750L
         const val REMOTE_TYPING_TIMEOUT_MS = 4_000L
         const val MESSAGE_SYNC_FALLBACK_MS = 2_000L
         const val INBOX_SYNC_FALLBACK_MS = 5_000L
         const val RECEIPT_EVENT = "message-receipt"
         const val MESSAGE_EVENT = "message-changed"
         const val TYPING_EVENT = "typing-changed"
+        const val REALTIME_LOG_TAG = "ChatRealtime"
     }
 }
