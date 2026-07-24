@@ -2,6 +2,12 @@ package com.example.nava.ui.chat
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
+import androidx.paging.PagingSource
+import androidx.paging.PagingState
+import androidx.paging.cachedIn
 import com.example.nava.data.chat.CachedChatMessageDao
 import com.example.nava.data.chat.CachedChatMessageEntity
 import com.example.nava.domain.catalog.HomeTrack
@@ -23,6 +29,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -90,8 +99,28 @@ class ChatViewModel @Inject constructor(
     private var receiptJob: Job? = null
     private var typingResetJob: Job? = null
     private var remoteTypingResetJob: Job? = null
+    private var activeMessagePagingSource: ChatMessagePagingSource? = null
+    private val activeConversationId = MutableStateFlow<String?>(null)
     private val messageLoadMutex = Mutex()
     private val sharedTracks = mutableMapOf<String, HomeTrack>()
+
+    val pagedMessages: Flow<PagingData<ChatMessage>> = activeConversationId
+        .flatMapLatest { conversationId ->
+            conversationId?.let {
+                Pager(
+                    config = PagingConfig(
+                        pageSize = PAGE_SIZE,
+                        initialLoadSize = PAGE_SIZE,
+                        prefetchDistance = MESSAGE_PREFETCH_DISTANCE,
+                        enablePlaceholders = false,
+                    ),
+                    pagingSourceFactory = {
+                        ChatMessagePagingSource(it).also { source -> activeMessagePagingSource = source }
+                    },
+                ).flow
+            } ?: flowOf(PagingData.empty())
+        }
+        .cachedIn(viewModelScope)
 
     init {
         refreshInbox()
@@ -132,14 +161,15 @@ class ChatViewModel @Inject constructor(
 
     fun openConversation(conversation: ChatConversation) = viewModelScope.launch {
         stopRealtime()
-        _state.value = _state.value.copy(activeConversation = conversation, messages = emptyList(), loading = true, error = false)
-        loadMessages(conversation.id)
+        activeConversationId.value = conversation.id
+        _state.value = _state.value.copy(activeConversation = conversation, messages = emptyList(), loading = false, error = false)
         runCatching { startRealtime(conversation) }
             .onFailure { _state.value = _state.value.copy(error = true) }
     }
 
     fun closeConversation() {
         viewModelScope.launch { stopRealtime() }
+        activeConversationId.value = null
         _state.value = _state.value.copy(activeConversation = null, messages = emptyList(), draft = "")
         refreshInbox()
     }
@@ -239,7 +269,7 @@ class ChatViewModel @Inject constructor(
                 )
             }
             if (_state.value.activeConversation?.id == conversationId) {
-                loadMessages(conversationId)
+                activeMessagePagingSource?.invalidate()
             } else {
                 refreshInbox()
             }
@@ -283,6 +313,46 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    private inner class ChatMessagePagingSource(
+        private val conversationId: String,
+    ) : PagingSource<String, ChatMessage>() {
+        override suspend fun load(params: LoadParams<String>): LoadResult<String, ChatMessage> {
+            val currentUserId = supabase.auth.currentUserOrNull()?.id
+                ?: return LoadResult.Error(IllegalStateException("Not signed in"))
+            val before = params.key
+            return runCatching {
+                val response = supabase.postgrest.rpc(
+                    "get_conversation_messages",
+                    buildJsonObject {
+                        put("p_conversation_id", conversationId)
+                        put("p_limit", params.loadSize.coerceAtMost(PAGE_SIZE))
+                        before?.let { put("p_before", it) }
+                    },
+                ).decodeList<MessageDto>()
+                val coverUrls = response.mapNotNull(MessageDto::trackId).distinct().associateWith { trackId ->
+                    runCatching { resolveSharedTrack(trackId).coverImageUrl }.getOrNull()
+                }
+                val messages = response.map { it.toMessage(currentUserId, coverUrls[it.trackId]) }
+                cacheMessages(currentUserId, conversationId, messages)
+                if (before == null && messages.any { !it.isMine && it.status != ChatMessageStatus.Read }) {
+                    markRead(conversationId)
+                }
+                LoadResult.Page(
+                    data = messages,
+                    prevKey = null,
+                    nextKey = messages.lastOrNull()?.createdAt.takeIf { messages.size >= params.loadSize },
+                )
+            }.getOrElse { error ->
+                if (before != null) return LoadResult.Error(error)
+                val cached = cachedMessages.getConversation(currentUserId, conversationId).map { it.toMessage() }
+                if (cached.isEmpty()) LoadResult.Error(error)
+                else LoadResult.Page(data = cached.asReversed(), prevKey = null, nextKey = null)
+            }
+        }
+
+        override fun getRefreshKey(state: PagingState<String, ChatMessage>): String? = null
+    }
+
     private fun markRead(conversationId: String) = viewModelScope.launch {
         runCatching {
             supabase.postgrest.rpc("mark_conversation_delivered", buildJsonObject { put("p_conversation_id", conversationId) })
@@ -305,14 +375,14 @@ class ChatViewModel @Inject constructor(
                 table = "conversation_messages"
                 filter("conversation_id", FilterOperator.EQ, conversation.id)
             }.collect {
-                loadMessages(conversation.id)
+                activeMessagePagingSource?.invalidate()
                 refreshInbox()
             }
         }
         messageBroadcastJob = viewModelScope.launch {
             channel.broadcastFlow<MessageEvent>(MESSAGE_EVENT).collect { event ->
                 if (event.userId != currentUser.id) {
-                    loadMessages(conversation.id)
+                    activeMessagePagingSource?.invalidate()
                     refreshInbox()
                 }
             }
@@ -337,13 +407,13 @@ class ChatViewModel @Inject constructor(
         }
         receiptJob = viewModelScope.launch {
             channel.broadcastFlow<ReceiptEvent>(RECEIPT_EVENT).collect { receipt ->
-                if (receipt.userId != currentUser.id) loadMessages(conversation.id)
+                if (receipt.userId != currentUser.id) activeMessagePagingSource?.invalidate()
             }
         }
         messageSyncJob = viewModelScope.launch {
             while (isActive && _state.value.activeConversation?.id == conversation.id) {
                 delay(MESSAGE_SYNC_FALLBACK_MS)
-                loadMessages(conversation.id)
+                activeMessagePagingSource?.invalidate()
             }
         }
         channel.subscribe(blockUntilSubscribed = true)
@@ -394,6 +464,7 @@ class ChatViewModel @Inject constructor(
         activeChannel?.let { supabase.realtime.removeChannel(it) }
         activeChannel = null
         _state.value = _state.value.copy(typingName = null)
+        activeMessagePagingSource = null
     }
 
     override fun onCleared() {
@@ -524,6 +595,7 @@ class ChatViewModel @Inject constructor(
 
     private companion object {
         const val PAGE_SIZE = 50
+        const val MESSAGE_PREFETCH_DISTANCE = 10
         const val MAX_MESSAGE_LENGTH = 2_000
         const val TYPING_IDLE_MS = 1_200L
         const val REMOTE_TYPING_TIMEOUT_MS = 4_000L

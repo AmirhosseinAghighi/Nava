@@ -14,6 +14,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.paging.LoadState
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemKey
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CloudOff
@@ -87,8 +90,10 @@ fun ChatShell(
         if (state.activeConversation == null) {
             ConversationInbox(state, viewModel)
         } else {
+            val pagedMessages = viewModel.pagedMessages.collectAsLazyPagingItems()
             ConversationThread(
                 state = state,
+                pagedMessages = pagedMessages,
                 onDraftChange = viewModel::changeDraft,
                 onSend = viewModel::sendText,
                 canShareNowPlaying = nowPlaying != null,
@@ -126,6 +131,7 @@ private fun ConversationInbox(state: ChatUiState, viewModel: ChatViewModel) {
 @Composable
 private fun ColumnScope.ConversationThread(
     state: ChatUiState,
+    pagedMessages: androidx.paging.compose.LazyPagingItems<ChatMessage>,
     onDraftChange: (String) -> Unit,
     onSend: () -> Unit,
     canShareNowPlaying: Boolean,
@@ -133,10 +139,10 @@ private fun ColumnScope.ConversationThread(
     onPlaySharedTrack: (String) -> Unit,
 ) {
     val listState = rememberLazyListState()
-    LaunchedEffect(state.messages.size) {
-        if (state.messages.isNotEmpty()) listState.animateScrollToItem(state.messages.lastIndex)
+    LaunchedEffect(pagedMessages.itemCount, state.messages.size) {
+        if (pagedMessages.itemCount > 0 || state.messages.isNotEmpty()) listState.animateScrollToItem(0)
     }
-    if (state.loading) {
+    if (state.loading || pagedMessages.loadState.refresh is LoadState.Loading) {
         Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
     } else {
         if (state.offline) {
@@ -159,37 +165,26 @@ private fun ColumnScope.ConversationThread(
             modifier = Modifier.weight(1f),
             state = listState,
             verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+            reverseLayout = true,
         ) {
             items(state.messages, key = ChatMessage::id) { message ->
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = if (message.isMine) Alignment.End else Alignment.Start,
-                ) {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(.84f),
-                        shape = MaterialTheme.shapes.large,
-                        color = if (message.isMine) MaterialTheme.colorScheme.primaryContainer
-                        else MaterialTheme.colorScheme.surfaceContainerHigh,
-                        contentColor = if (message.isMine) MaterialTheme.colorScheme.onPrimaryContainer
-                        else MaterialTheme.colorScheme.onSurface,
-                    ) {
-                        Column(Modifier.padding(NavaSpacing.Md), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-                            if (!message.isMine) {
-                                Text(
-                                    message.senderName,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                            message.body?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
-                            message.sharedTrackId?.let { trackId ->
-                                SharedTrackCard(message = message, onClick = { onPlaySharedTrack(trackId) })
-                            }
-                            MessageMetadata(message)
-                        }
-                    }
-                }
+                ChatMessageBubble(message, onPlaySharedTrack)
             }
+            items(
+                count = pagedMessages.itemCount,
+                key = pagedMessages.itemKey(ChatMessage::id),
+            ) { index ->
+                pagedMessages[index]?.let { message -> ChatMessageBubble(message, onPlaySharedTrack) }
+            }
+            if (pagedMessages.loadState.append is LoadState.Loading) {
+                item { Box(Modifier.fillMaxWidth().padding(NavaSpacing.Sm), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+            }
+            if (pagedMessages.loadState.append is LoadState.Error) {
+                item { Button(onClick = pagedMessages::retry) { Text(stringResource(R.string.retry)) } }
+            }
+        }
+        if (state.typingName == null && pagedMessages.loadState.refresh is LoadState.Error) {
+            Button(onClick = pagedMessages::retry) { Text(stringResource(R.string.retry)) }
         }
         state.typingName?.let { typingName ->
             Surface(
@@ -218,6 +213,38 @@ private fun ColumnScope.ConversationThread(
         }
         IconButton(onClick = onSend, enabled = state.draft.isNotBlank() && !state.sending) {
             Icon(Icons.Outlined.Send, contentDescription = stringResource(R.string.send_message))
+        }
+    }
+}
+
+@Composable
+private fun ChatMessageBubble(message: ChatMessage, onPlaySharedTrack: (String) -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = if (message.isMine) Alignment.End else Alignment.Start,
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(.84f),
+            shape = MaterialTheme.shapes.large,
+            color = if (message.isMine) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = if (message.isMine) MaterialTheme.colorScheme.onPrimaryContainer
+            else MaterialTheme.colorScheme.onSurface,
+        ) {
+            Column(Modifier.padding(NavaSpacing.Md), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                if (!message.isMine) {
+                    Text(
+                        message.senderName,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                message.body?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
+                message.sharedTrackId?.let { trackId ->
+                    SharedTrackCard(message = message, onClick = { onPlaySharedTrack(trackId) })
+                }
+                MessageMetadata(message)
+            }
         }
     }
 }
