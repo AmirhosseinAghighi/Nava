@@ -29,6 +29,7 @@ data class PlaylistCoverUpload(val bytes: ByteArray, val extension: String)
 
 interface LibraryRepository {
     suspend fun load(): Result<LibrarySummary>
+    suspend fun loadPlaylistsPage(offset: Int, limit: Int): Result<List<UserPlaylist>>
     suspend fun loadPlaylist(playlistId: String): Result<PlaylistDetails>
     suspend fun loadCatalog(): Result<List<PlaylistTrack>>
     suspend fun createPlaylist(title: String, description: String?, isPublic: Boolean, cover: PlaylistCoverUpload?): Result<Unit>

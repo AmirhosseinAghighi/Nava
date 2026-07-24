@@ -4,6 +4,10 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
 import com.example.nava.domain.library.LibraryRepository
 import com.example.nava.domain.library.LibrarySummary
 import com.example.nava.domain.library.PlaylistCoverUpload
@@ -15,6 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -37,10 +42,23 @@ data class LibraryUiState(
 ) : ViewModel() {
     private val _state = MutableStateFlow(LibraryUiState())
     val state: StateFlow<LibraryUiState> = _state.asStateFlow()
+    private var playlistPagingSource: LibraryPlaylistPagingSource? = null
+    val pagedPlaylists: Flow<PagingData<com.example.nava.domain.library.UserPlaylist>> = Pager(
+        config = PagingConfig(
+            pageSize = PLAYLIST_PAGE_SIZE,
+            initialLoadSize = PLAYLIST_PAGE_SIZE,
+            prefetchDistance = PLAYLIST_PREFETCH_DISTANCE,
+            enablePlaceholders = false,
+        ),
+        pagingSourceFactory = {
+            LibraryPlaylistPagingSource(repository).also { playlistPagingSource = it }
+        },
+    ).flow.cachedIn(viewModelScope)
 
     init { reload() }
 
     fun reload() = viewModelScope.launch {
+        playlistPagingSource?.invalidate()
         _state.update { it.copy(loading = true, failed = false) }
         repository.load().fold(
             onSuccess = { summary -> _state.update { it.copy(loading = false, summary = summary) } },
@@ -148,5 +166,7 @@ data class LibraryUiState(
 
     private companion object {
         const val MAX_PLAYLIST_COVER_BYTES = 2 * 1024 * 1024
+        const val PLAYLIST_PAGE_SIZE = 20
+        const val PLAYLIST_PREFETCH_DISTANCE = 5
     }
 }

@@ -2,6 +2,10 @@ package com.example.nava.ui.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
 import com.example.nava.data.search.SearchHistoryRepository
 import com.example.nava.domain.catalog.SearchRepository
 import com.example.nava.domain.catalog.SearchTrack
@@ -13,6 +17,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -39,7 +45,6 @@ data class SearchUiState(
     val results: List<SearchTrack> = emptyList(),
     val history: List<String> = emptyList(),
     val failed: Boolean = false,
-    val canLoadMore: Boolean = false,
 ) {
     val artists: List<SearchArtistResult>
         get() = results
@@ -73,6 +78,28 @@ class SearchViewModel @Inject constructor(
     private val _state = MutableStateFlow(SearchUiState())
     val state: StateFlow<SearchUiState> = _state.asStateFlow()
     private val requests = MutableStateFlow(SearchRequest())
+    val pagedResults = requests
+        .debounce(SEARCH_DEBOUNCE_MS)
+        .distinctUntilChanged()
+        .flatMapLatest { request ->
+            val query = request.query.trim()
+            if (query.isBlank()) {
+                flowOf(PagingData.empty())
+            } else {
+                Pager(
+                    config = PagingConfig(
+                        pageSize = SEARCH_PAGE_SIZE,
+                        initialLoadSize = SEARCH_PAGE_SIZE,
+                        prefetchDistance = SEARCH_PREFETCH_DISTANCE,
+                        enablePlaceholders = false,
+                    ),
+                    pagingSourceFactory = {
+                        SearchPagingSource(repository, query, request.language)
+                    },
+                ).flow
+            }
+        }
+        .cachedIn(viewModelScope)
 
     init {
         viewModelScope.launch {
@@ -130,35 +157,13 @@ class SearchViewModel @Inject constructor(
         performSearch(SearchRequest(_state.value.query, _state.value.language))
     }
 
-    fun loadMore() {
-        val current = _state.value
-        if (current.loading || !current.canLoadMore || current.query.isBlank()) return
-        viewModelScope.launch {
-            _state.update { it.copy(loading = true, failed = false) }
-            repository.search(current.query.trim(), current.language, current.results.size).fold(
-                onSuccess = { page ->
-                    if (_state.value.query == current.query && _state.value.language == current.language) {
-                        _state.update {
-                            it.copy(
-                                loading = false,
-                                results = current.results + page.tracks,
-                                canLoadMore = current.results.size + page.tracks.size < page.totalCount,
-                            )
-                        }
-                    }
-                },
-                onFailure = { _state.update { it.copy(loading = false, failed = true) } },
-            )
-        }
-    }
-
     private suspend fun performSearch(request: SearchRequest) {
         val query = request.query.trim()
         if (query.isBlank()) {
-            _state.update { it.copy(loading = false, results = emptyList(), failed = false, canLoadMore = false) }
+            _state.update { it.copy(loading = false, results = emptyList(), failed = false) }
             return
         }
-        _state.update { it.copy(loading = true, failed = false, results = emptyList(), canLoadMore = false) }
+        _state.update { it.copy(loading = true, failed = false, results = emptyList()) }
         repository.search(query, request.language, 0).fold(
             onSuccess = { page ->
                 if (_state.value.query.trim() == query && _state.value.language == request.language) {
@@ -166,7 +171,6 @@ class SearchViewModel @Inject constructor(
                         it.copy(
                             loading = false,
                             results = page.tracks,
-                            canLoadMore = page.tracks.size < page.totalCount,
                         )
                     }
                 }
@@ -181,5 +185,7 @@ class SearchViewModel @Inject constructor(
 
     private companion object {
         const val SEARCH_DEBOUNCE_MS = 350L
+        const val SEARCH_PAGE_SIZE = 30
+        const val SEARCH_PREFETCH_DISTANCE = 8
     }
 }

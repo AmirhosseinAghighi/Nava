@@ -10,6 +10,7 @@ import com.example.nava.domain.library.UserPlaylist
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.storage.storage
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
@@ -39,6 +40,29 @@ import javax.inject.Singleton
             },
             likedCount = likes,
         )
+    }
+
+    override suspend fun loadPlaylistsPage(offset: Int, limit: Int): Result<List<UserPlaylist>> = runCatching {
+        val userId = requireUserId()
+        val page = supabase.from("playlists").select {
+            filter { eq("owner_id", userId) }
+            order("updated_at", Order.DESCENDING)
+            range(offset.toLong(), (offset + limit - 1).toLong())
+        }.decodeList<PlaylistDto>()
+        if (page.isEmpty()) return@runCatching emptyList()
+
+        val pageIds = page.map(PlaylistDto::id).toSet()
+        val memberships = supabase.from("playlist_tracks").select().decodeList<PlaylistTrackRow>()
+            .filter { it.playlistId in pageIds }
+        val tracksById = loadCatalogRows().associateBy(TrackCardDto::id)
+        val membershipsByPlaylist = memberships.groupBy(PlaylistTrackRow::playlistId)
+        page.map { playlist ->
+            val playlistTracks = membershipsByPlaylist[playlist.id].orEmpty().sortedBy(PlaylistTrackRow::position)
+            playlist.toDomain(
+                trackCount = playlistTracks.size,
+                fallbackCover = playlistTracks.firstNotNullOfOrNull { tracksById[it.trackId]?.coverImageUrl },
+            )
+        }
     }
 
     override suspend fun loadPlaylist(playlistId: String): Result<PlaylistDetails> = runCatching {
