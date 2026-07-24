@@ -5,7 +5,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
 
 object NavaSpacing {
+    val Hairline = 1.dp
+    val Micro = 2.dp
     val Xs = 4.dp
+    val Compact = 5.dp
     val Sm = 8.dp
     val Md = 12.dp
     val Lg = 16.dp
@@ -17,9 +20,49 @@ object NavaMotion {
     const val Fast = 120
     const val Standard = 220
     const val Slow = 320
+    const val Shimmer = 1_250
 }
 
 object NavaDimensions {
+    val IconTiny = 11.dp
+    val IconCompact = 14.dp
+    val IconSmall = 16.dp
+    val IconMedium = 18.dp
+    val IconLarge = 20.dp
+    val IconXl = 21.dp
+    val IconXxl = 22.dp
+    val IconHero = 24.dp
+    val IconDisplay = 28.dp
+    val IconEmpty = 34.dp
+    val IconContainer = 38.dp
+    val ControlCompact = 40.dp
+    val ControlMedium = 42.dp
+    val ControlLarge = 44.dp
+    val ControlXl = 48.dp
+    val BorderThin = 1.dp
+    val BorderMedium = 1.5.dp
+    val BorderStrong = 2.dp
+    val BorderEmphasis = 3.dp
+    val ElevationLow = 2.dp
+    val ElevationMedium = 6.dp
+    val ElevationHigh = 8.dp
+    val BadgeMinSize = 18.dp
+    val TopBarActionSize = 48.dp
+    val TopBarAvatarSize = 44.dp
+    val TopBarLoadingSize = 20.dp
+    val TopBarPremiumBadgeSize = 18.dp
+    val SharePopupTopOffset = 72.dp
+    val SheetLoadingHeight = 180.dp
+    val SheetListMaxHeight = 420.dp
+    val PickerLoadingHeight = 320.dp
+    val PickerEmptyHeight = 240.dp
+    val PlaylistHeroHeight = 136.dp
+    val PlaylistDetailsArtworkSize = 156.dp
+    val PlaylistEditorArtworkSize = 140.dp
+    val QuickActionCardHeight = 104.dp
+    val DownloadsEmptyIconSize = 80.dp
+    val SearchArtistArtworkSize = 68.dp
+    val CatalogPickerArtworkSize = 56.dp
     val AuthLogoSize = 104.dp
     val AuthContentMaxWidth = 520.dp
     val AuthButtonMinHeight = 52.dp
@@ -59,6 +102,11 @@ object NavaDimensions {
     val ChatTrackArtworkSize = 72.dp
     val ChatTrackPlayBadgeSize = 28.dp
     val ChatReceiptIconSize = 18.dp
+    val ShimmerTrackHeight = 88.dp
+    val ShimmerCardHeight = 132.dp
+    val ShimmerLineLongWidth = 156.dp
+    val ShimmerLineShortWidth = 92.dp
+    val ShimmerLineHeight = 14.dp
 }
 
 val NavaShapes = Shapes(
