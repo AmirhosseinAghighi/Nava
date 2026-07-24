@@ -149,7 +149,10 @@ class ChatViewModel @Inject constructor(
             }.onSuccess { conversations ->
                 _state.value = _state.value.copy(conversations = conversations, loading = false)
             }.onFailure {
-                _state.value = _state.value.copy(loading = false, error = true)
+                _state.value = _state.value.copy(
+                    loading = false,
+                    error = _state.value.activeConversation == null,
+                )
             }
         }
     }
@@ -299,7 +302,9 @@ class ChatViewModel @Inject constructor(
             )
         }.onSuccess {
             _state.value = _state.value.copy(
-                messages = _state.value.messages.filterNot { it.id == pendingId },
+                messages = _state.value.messages.map { message ->
+                    if (message.id == pendingId) message.copy(status = ChatMessageStatus.Sent) else message
+                },
                 sending = false,
             )
             runCatching {
@@ -320,7 +325,7 @@ class ChatViewModel @Inject constructor(
                     if (message.id == pendingId) message.copy(status = ChatMessageStatus.Failed) else message
                 },
                 sending = false,
-                error = true,
+                error = false,
             )
         }
     }
@@ -379,6 +384,7 @@ class ChatViewModel @Inject constructor(
                 }
                 val messages = response.map { it.toMessage(currentUserId, coverUrls[it.trackId]) }
                 cacheMessages(currentUserId, conversationId, messages)
+                if (before == null) removeConfirmedPendingMessages(conversationId, messages)
                 if (before == null && messages.any { !it.isMine && it.status != ChatMessageStatus.Read }) {
                     markRead(conversationId)
                 }
@@ -396,6 +402,38 @@ class ChatViewModel @Inject constructor(
         }
 
         override fun getRefreshKey(state: PagingState<String, ChatMessage>): String? = null
+    }
+
+    private fun removeConfirmedPendingMessages(
+        conversationId: String,
+        confirmedMessages: List<ChatMessage>,
+    ) {
+        val currentState = _state.value
+        if (currentState.activeConversation?.id != conversationId) return
+        val confirmedPendingIds = currentState.messages
+            .asSequence()
+            .filter { message ->
+                message.id.startsWith(PENDING_MESSAGE_ID_PREFIX) &&
+                    message.status == ChatMessageStatus.Sent
+            }
+            .filter { pending -> confirmedMessages.any { confirmed -> confirmed.matchesPendingMessage(pending) } }
+            .map(ChatMessage::id)
+            .toSet()
+        if (confirmedPendingIds.isNotEmpty()) {
+            _state.value = currentState.copy(
+                messages = currentState.messages.filterNot { it.id in confirmedPendingIds },
+            )
+        }
+    }
+
+    private fun ChatMessage.matchesPendingMessage(pending: ChatMessage): Boolean {
+        if (!isMine || senderId != pending.senderId || body != pending.body || sharedTrackId != pending.sharedTrackId) {
+            return false
+        }
+        val pendingCreatedAt = runCatching { Instant.parse(pending.createdAt).toEpochMilli() }.getOrNull() ?: return false
+        val confirmedCreatedAt = runCatching { Instant.parse(createdAt).toEpochMilli() }.getOrNull() ?: return false
+        return confirmedCreatedAt in
+            (pendingCreatedAt - PENDING_MESSAGE_CLOCK_SKEW_MS)..(pendingCreatedAt + PENDING_MESSAGE_CONFIRMATION_MS)
     }
 
     private fun markRead(conversationId: String) = viewModelScope.launch {
@@ -452,7 +490,9 @@ class ChatViewModel @Inject constructor(
         session.messageSyncJob = viewModelScope.launch {
             while (isActive && isCurrentSession(session)) {
                 delay(MESSAGE_SYNC_FALLBACK_MS)
-                activeMessagePagingSource?.invalidate()
+                if (channel.status.value != RealtimeChannel.Status.SUBSCRIBED) {
+                    activeMessagePagingSource?.invalidate()
+                }
             }
         }
         session.channelStatusJob = viewModelScope.launch {
@@ -465,10 +505,13 @@ class ChatViewModel @Inject constructor(
                 if (status != previousStatus) {
                     debugLog("conversation session=${session.serial} connection=$status")
                 }
-                previousStatus = status
-                if (becameSubscribed) restartBroadcastCollectors(session)
+                if (becameSubscribed) {
+                    restartBroadcastCollectors(session)
+                    activeMessagePagingSource?.invalidate()
+                }
                 session.typingCoordinator.channelStatusChanged(status)
                 if (becameSubscribed) markRead(conversation.id)
+                previousStatus = status
             }
         }
         channel.subscribe(blockUntilSubscribed = false)
@@ -882,11 +925,14 @@ class ChatViewModel @Inject constructor(
         const val PAGE_SIZE = 50
         const val MESSAGE_PREFETCH_DISTANCE = 10
         const val MAX_MESSAGE_LENGTH = 2_000
+        const val PENDING_MESSAGE_ID_PREFIX = "pending:"
+        const val PENDING_MESSAGE_CLOCK_SKEW_MS = 5_000L
+        const val PENDING_MESSAGE_CONFIRMATION_MS = 120_000L
         const val TYPING_IDLE_MS = 1_200L
         const val TYPING_REFRESH_MS = 1_000L
         const val TYPING_ACK_TIMEOUT_MS = 750L
         const val REMOTE_TYPING_TIMEOUT_MS = 4_000L
-        const val MESSAGE_SYNC_FALLBACK_MS = 2_000L
+        const val MESSAGE_SYNC_FALLBACK_MS = 15_000L
         const val INBOX_SYNC_FALLBACK_MS = 5_000L
         const val RECEIPT_EVENT = "message-receipt"
         const val MESSAGE_EVENT = "message-changed"

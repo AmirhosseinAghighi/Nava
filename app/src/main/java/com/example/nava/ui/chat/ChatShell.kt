@@ -101,7 +101,7 @@ fun ChatShell(
                 onPlaySharedTrack = { viewModel.playSharedTrack(it, playbackViewModel::play) },
             )
         }
-        if (state.error) {
+        if (state.error && state.activeConversation == null) {
             Button(onClick = viewModel::retry) { Text(stringResource(R.string.retry)) }
         }
     }
@@ -142,7 +142,15 @@ private fun ColumnScope.ConversationThread(
     LaunchedEffect(pagedMessages.itemCount, state.messages.size) {
         if (pagedMessages.itemCount > 0 || state.messages.isNotEmpty()) listState.animateScrollToItem(0)
     }
-    if (state.loading || pagedMessages.loadState.refresh is LoadState.Loading) {
+    val isInitialMessageLoad =
+        pagedMessages.loadState.refresh is LoadState.Loading &&
+            pagedMessages.itemCount == 0 &&
+            state.messages.isEmpty()
+    val isInitialMessageLoadError =
+        pagedMessages.loadState.refresh is LoadState.Error &&
+            pagedMessages.itemCount == 0 &&
+            state.messages.isEmpty()
+    if (state.loading || isInitialMessageLoad) {
         Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
     } else {
         if (state.offline) {
@@ -179,11 +187,8 @@ private fun ColumnScope.ConversationThread(
             if (pagedMessages.loadState.append is LoadState.Loading) {
                 item { Box(Modifier.fillMaxWidth().padding(NavaSpacing.Sm), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
             }
-            if (pagedMessages.loadState.append is LoadState.Error) {
-                item { Button(onClick = pagedMessages::retry) { Text(stringResource(R.string.retry)) } }
-            }
         }
-        if (state.typingName == null && pagedMessages.loadState.refresh is LoadState.Error) {
+        if (isInitialMessageLoadError) {
             Button(onClick = pagedMessages::retry) { Text(stringResource(R.string.retry)) }
         }
         state.typingName?.let { typingName ->
