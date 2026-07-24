@@ -12,8 +12,12 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
@@ -129,6 +133,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.paging.LoadState
+import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemKey
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -177,8 +185,25 @@ import com.example.nava.domain.preferences.UserPreferences
 import com.example.nava.ui.theme.NavaDimensions
 import com.example.nava.ui.theme.NavaBlack
 import com.example.nava.ui.theme.NavaGold
+import com.example.nava.ui.theme.NavaLikedStart
+import com.example.nava.ui.theme.NavaLikedEnd
+import com.example.nava.ui.theme.NavaLikedAccent
+import com.example.nava.ui.theme.NavaRecentStart
+import com.example.nava.ui.theme.NavaRecentEnd
+import com.example.nava.ui.theme.NavaRecentAccent
+import com.example.nava.ui.theme.NavaMyPlaylistsStart
+import com.example.nava.ui.theme.NavaMyPlaylistsEnd
+import com.example.nava.ui.theme.NavaMyPlaylistsAccent
+import com.example.nava.ui.theme.NavaTopPlaylistsStart
+import com.example.nava.ui.theme.NavaTopPlaylistsEnd
+import com.example.nava.ui.theme.NavaTopPlaylistsAccent
+import com.example.nava.ui.theme.NavaPlaylistLiked
+import com.example.nava.ui.theme.NavaWorldMusic
+import com.example.nava.ui.theme.NavaLocalMusic
+import com.example.nava.ui.theme.NavaUserPlaylist
 import com.example.nava.ui.theme.NavaSpacing
 import com.example.nava.ui.theme.NavaWhite
+import com.example.nava.ui.theme.ShimmerBox
 import com.example.nava.ui.home.HomeUiState
 import com.example.nava.ui.home.HomeQuickViewModel
 import com.example.nava.ui.home.HomeViewModel
@@ -262,21 +287,21 @@ private fun TopBarProfileAvatar(
     Box(
         modifier = Modifier
             .padding(start = NavaSpacing.Sm)
-            .size(48.dp),
+            .size(NavaDimensions.TopBarActionSize),
         contentAlignment = Alignment.Center,
     ) {
         Surface(
             onClick = onClick,
             modifier = Modifier
-                .size(44.dp)
-                .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape),
+                .size(NavaDimensions.TopBarAvatarSize)
+                .border(NavaDimensions.BorderStrong, MaterialTheme.colorScheme.primary, CircleShape),
             shape = CircleShape,
             color = MaterialTheme.colorScheme.primaryContainer,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
             shadowElevation = NavaSpacing.Xs,
         ) {
             Box(
-                modifier = Modifier.fillMaxSize().padding(2.dp),
+                modifier = Modifier.fillMaxSize().padding(NavaSpacing.Micro),
                 contentAlignment = Alignment.Center,
             ) {
                 when {
@@ -286,8 +311,8 @@ private fun TopBarProfileAvatar(
                         modifier = Modifier.fillMaxSize(),
                     )
                     state.isLoading -> CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(NavaDimensions.TopBarLoadingSize),
+                        strokeWidth = NavaDimensions.BorderStrong,
                     )
                     else -> Icon(
                         Icons.Outlined.AccountCircle,
@@ -302,18 +327,18 @@ private fun TopBarProfileAvatar(
             Surface(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .size(18.dp)
-                    .border(1.5.dp, MaterialTheme.colorScheme.surface, CircleShape),
+                    .size(NavaDimensions.TopBarPremiumBadgeSize)
+                    .border(NavaDimensions.BorderMedium, MaterialTheme.colorScheme.surface, CircleShape),
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
-                shadowElevation = 2.dp,
+                shadowElevation = NavaDimensions.ElevationLow,
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = Icons.Filled.Star,
                         contentDescription = stringResource(R.string.premium_member),
-                        modifier = Modifier.size(11.dp),
+                        modifier = Modifier.size(NavaDimensions.IconTiny),
                     )
                 }
             }
@@ -333,7 +358,7 @@ private fun NotificationBell(
     }
     Box(
         modifier = Modifier
-            .size(48.dp)
+            .size(NavaDimensions.TopBarActionSize)
             .semantics { contentDescription = notificationDescription },
     ) {
         IconButton(onClick = onClick, modifier = Modifier.fillMaxSize()) {
@@ -343,15 +368,15 @@ private fun NotificationBell(
             Surface(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .height(18.dp)
-                    .widthIn(min = 18.dp),
+                    .height(NavaDimensions.BadgeMinSize)
+                    .widthIn(min = NavaDimensions.BadgeMinSize),
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.error,
                 contentColor = MaterialTheme.colorScheme.onError,
-                shadowElevation = 2.dp,
+                shadowElevation = NavaDimensions.ElevationLow,
             ) {
                 Box(
-                    modifier = Modifier.padding(horizontal = 4.dp),
+                    modifier = Modifier.padding(horizontal = NavaSpacing.Xs),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
@@ -367,7 +392,7 @@ private fun NotificationBell(
 }
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 fun NavaAppShell(
     session: AuthSession,
     preferences: UserPreferences,
@@ -435,7 +460,9 @@ fun NavaAppShell(
     ) {
         selectedIndex = 0
     }
-    Scaffold(
+    SharedTransitionLayout {
+        val sharedTransitionScope = this
+        Scaffold(
         topBar = {
             TopAppBar(
                 navigationIcon = {
@@ -490,11 +517,15 @@ fun NavaAppShell(
         bottomBar = {
             Column {
                 nowPlaying?.let {
-                    MiniPlayer(
-                        nowPlaying = it,
-                        onToggle = { if (it.playing) playbackViewModel.pause() else playbackViewModel.resume() },
-                        onOpen = { playerExpanded = true },
-                    )
+                    AnimatedVisibility(visible = !playerExpanded) {
+                        MiniPlayer(
+                            nowPlaying = it,
+                            onToggle = { if (it.playing) playbackViewModel.pause() else playbackViewModel.resume() },
+                            onOpen = { playerExpanded = true },
+                            sharedTransitionScope = sharedTransitionScope,
+                            animatedVisibilityScope = this,
+                        )
+                    }
                 }
                 NavigationBar {
                     navigationItems.forEachIndexed { index, item ->
@@ -609,6 +640,7 @@ fun NavaAppShell(
             enter = fadeIn(tween(NavaMotion.Standard)) + slideInVertically(tween(NavaMotion.Standard)) { it },
             exit = fadeOut(tween(NavaMotion.Fast)) + slideOutVertically(tween(NavaMotion.Standard)) { it },
         ) {
+            val animatedVisibilityScope = this
             FullPlayer(
                 nowPlaying = now,
                 playbackSpeed = playbackSpeed,
@@ -638,8 +670,11 @@ fun NavaAppShell(
                 onShare = { shareCandidate = now.track },
                 onPrevious = playbackViewModel::skipToPrevious,
                 onNext = playbackViewModel::skipToNext,
+                sharedTransitionScope = sharedTransitionScope,
+                animatedVisibilityScope = animatedVisibilityScope,
             )
         }
+    }
     }
     addToPlaylistCandidate?.let { track ->
         AddToPlaylistSheet(
@@ -836,7 +871,7 @@ private fun ShareSuccessPopup(recipientName: String) {
             .fillMaxSize()
             .statusBarsPadding()
             .padding(horizontal = NavaSpacing.Lg)
-            .padding(top = 72.dp),
+            .padding(top = NavaDimensions.SharePopupTopOffset),
         contentAlignment = Alignment.TopCenter,
     ) {
         Surface(
@@ -851,7 +886,7 @@ private fun ShareSuccessPopup(recipientName: String) {
                 horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
             ) {
                 Surface(
-                    modifier = Modifier.size(28.dp),
+                    modifier = Modifier.size(NavaDimensions.IconDisplay),
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -859,7 +894,7 @@ private fun ShareSuccessPopup(recipientName: String) {
                     Icon(
                         imageVector = Icons.Outlined.Check,
                         contentDescription = null,
-                        modifier = Modifier.padding(5.dp),
+                        modifier = Modifier.padding(NavaSpacing.Compact),
                     )
                 }
                 Text(
@@ -1010,7 +1045,14 @@ private fun TrackShareSheet(
 }
 
 @Composable
-private fun MiniPlayer(nowPlaying: NowPlaying, onToggle: () -> Unit, onOpen: () -> Unit) {
+@OptIn(ExperimentalSharedTransitionApi::class)
+private fun MiniPlayer(
+    nowPlaying: NowPlaying,
+    onToggle: () -> Unit,
+    onOpen: () -> Unit,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope,
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1027,7 +1069,15 @@ private fun MiniPlayer(nowPlaying: NowPlaying, onToggle: () -> Unit, onOpen: () 
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .size(NavaDimensions.MiniPlayerArtworkSize)
-                    .clip(MaterialTheme.shapes.medium),
+                    .clip(MaterialTheme.shapes.medium)
+                    .then(
+                        with(sharedTransitionScope) {
+                            Modifier.sharedElement(
+                                rememberSharedContentState(key = "track-artwork-${nowPlaying.track.id}"),
+                                animatedVisibilityScope,
+                            )
+                        },
+                    ),
             )
             Column(modifier = Modifier.weight(1f).padding(start = NavaSpacing.Sm)) {
                 Text(
@@ -1114,7 +1164,7 @@ private fun AddToPlaylistSheet(
                         contentDescription = stringResource(R.string.track_artwork, track.title),
                         contentScale = ContentScale.Crop,
                         error = painterResource(R.drawable.ic_launcher_foreground),
-                        modifier = Modifier.size(58.dp).clip(MaterialTheme.shapes.medium),
+                        modifier = Modifier.size(NavaDimensions.SearchActionArtworkSize).clip(MaterialTheme.shapes.medium),
                     )
                     Column(modifier = Modifier.weight(1f)) {
                         Text(track.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 1)
@@ -1129,7 +1179,7 @@ private fun AddToPlaylistSheet(
             }
             when {
                 loading || busy -> Box(
-                    modifier = Modifier.fillMaxWidth().height(180.dp),
+                    modifier = Modifier.fillMaxWidth().height(NavaDimensions.SheetLoadingHeight),
                     contentAlignment = Alignment.Center,
                 ) {
                     CircularProgressIndicator()
@@ -1155,12 +1205,12 @@ private fun AddToPlaylistSheet(
                     verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
                 ) {
                     Surface(
-                        modifier = Modifier.size(72.dp),
+                        modifier = Modifier.size(NavaDimensions.SearchEmptyIconSize),
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.secondaryContainer,
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Icon(Icons.Outlined.PlaylistAdd, contentDescription = null, modifier = Modifier.size(34.dp))
+                            Icon(Icons.Outlined.PlaylistAdd, contentDescription = null, modifier = Modifier.size(NavaDimensions.IconEmpty))
                         }
                     }
                     Text(stringResource(R.string.no_playlists_for_track), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -1171,7 +1221,7 @@ private fun AddToPlaylistSheet(
                     )
                 }
                 else -> LazyColumn(
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(max = NavaDimensions.SheetListMaxHeight),
                     verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
                 ) {
                     items(playlists, key = UserPlaylist::id) { playlist ->
@@ -1185,7 +1235,7 @@ private fun AddToPlaylistSheet(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
                             ) {
-                                PlaylistArtwork(playlist.coverImageUrl, playlist.title, Modifier.size(62.dp))
+                                PlaylistArtwork(playlist.coverImageUrl, playlist.title, Modifier.size(NavaDimensions.SearchActionArtworkSize))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         playlist.title,
@@ -1239,6 +1289,8 @@ private fun FullPlayer(
     onShare: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope,
 ) {
     BackHandler(onBack = onDismiss)
     val fallbackPaletteColor = MaterialTheme.colorScheme.primary
@@ -1355,6 +1407,8 @@ private fun FullPlayer(
                         NowPlayingArtwork(
                             nowPlaying = nowPlaying,
                             onPaletteColorChanged = { paletteColor = it },
+                            sharedTransitionScope = sharedTransitionScope,
+                            animatedVisibilityScope = animatedVisibilityScope,
                         )
                         Text(
                             text = stringResource(R.string.player_swipe_hint),
@@ -1461,7 +1515,7 @@ private fun PlayerHeader(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
                     ) {
-                        Icon(Icons.Outlined.Timer, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Icon(Icons.Outlined.Timer, contentDescription = null, modifier = Modifier.size(NavaDimensions.IconCompact))
                         Text(
                             stringResource(R.string.sleep_timer_compact, sleepTimerMinutes),
                             style = MaterialTheme.typography.labelSmall,
@@ -1490,7 +1544,7 @@ private fun PlayerTopActionButton(
     Surface(
         onClick = onClick,
         modifier = Modifier
-            .size(42.dp)
+            .size(NavaDimensions.ControlMedium)
             .semantics { this.contentDescription = contentDescription },
         shape = CircleShape,
         color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .82f),
@@ -1606,7 +1660,7 @@ private fun PlayerLibraryActions(
         modifier = Modifier
             .fillMaxWidth()
             .border(
-                width = 1.dp,
+                width = NavaDimensions.BorderThin,
                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .55f),
                 shape = panelShape,
             ),
@@ -1660,7 +1714,7 @@ private fun PlayerRoundActionButton(
     ) {
         Surface(
             onClick = onClick,
-            modifier = Modifier.size(if (primary) 48.dp else 44.dp),
+            modifier = Modifier.size(if (primary) NavaDimensions.ControlXl else NavaDimensions.ControlLarge),
             shape = CircleShape,
             color = when {
                 primary -> MaterialTheme.colorScheme.primary
@@ -1674,7 +1728,7 @@ private fun PlayerRoundActionButton(
             },
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(icon, contentDescription = label, modifier = Modifier.size(if (primary) 24.dp else 22.dp))
+                Icon(icon, contentDescription = label, modifier = Modifier.size(if (primary) NavaDimensions.IconHero else NavaDimensions.IconXxl))
             }
         }
         Text(
@@ -1717,9 +1771,9 @@ private fun PlayerDownloadAction(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs),
     ) {
-        Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.size(NavaDimensions.ControlXl), contentAlignment = Alignment.Center) {
             Canvas(modifier = Modifier.fillMaxSize()) {
-                val strokeWidth = 3.dp.toPx()
+                val strokeWidth = NavaDimensions.BorderEmphasis.toPx()
                 drawCircle(
                     color = ringTrackColor,
                     style = Stroke(width = strokeWidth),
@@ -1738,7 +1792,7 @@ private fun PlayerDownloadAction(
             Surface(
                 onClick = onClick,
                 enabled = !isDownloaded && !isDownloading,
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier.size(NavaDimensions.ControlCompact),
                 shape = CircleShape,
                 color = if (isDownloaded) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
                 contentColor = if (isDownloaded) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
@@ -1747,7 +1801,7 @@ private fun PlayerDownloadAction(
                     Icon(
                         if (isDownloaded) Icons.Outlined.DownloadDone else Icons.Outlined.Download,
                         contentDescription = label,
-                        modifier = Modifier.size(21.dp),
+                        modifier = Modifier.size(NavaDimensions.IconXl),
                     )
                 }
             }
@@ -1791,6 +1845,8 @@ private fun playbackSeconds(timeMs: Long): Long = (timeMs / 1_000L) % 60L
 private fun NowPlayingArtwork(
     nowPlaying: NowPlaying,
     onPaletteColorChanged: (Color) -> Unit,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope,
 ) {
     val fallbackPaletteColor = MaterialTheme.colorScheme.primary
     var bitmap by remember(nowPlaying.track.coverImageUrl) { mutableStateOf<Bitmap?>(null) }
@@ -1827,7 +1883,15 @@ private fun NowPlayingArtwork(
                 MaterialTheme.colorScheme.onBackground.copy(alpha = .18f),
                 CircleShape,
             )
-            .padding(NavaSpacing.Sm),
+            .padding(NavaSpacing.Sm)
+            .then(
+                with(sharedTransitionScope) {
+                    Modifier.sharedElement(
+                        rememberSharedContentState(key = "track-artwork-${nowPlaying.track.id}"),
+                        animatedVisibilityScope,
+                    )
+                },
+            ),
         contentAlignment = Alignment.Center,
     ) {
         AsyncImage(
@@ -1869,6 +1933,7 @@ private fun LibraryShell(
     val state by viewModel.state.collectAsState()
     val likes by likesViewModel.state.collectAsState()
     val catalogState by catalogViewModel.uiState.collectAsState()
+    val pagedPlaylists = viewModel.pagedPlaylists.collectAsLazyPagingItems()
     var editorOpen by remember { mutableStateOf(false) }
     var editorPlaylist by remember { mutableStateOf<UserPlaylist?>(null) }
     var deleteCandidate by remember { mutableStateOf<UserPlaylist?>(null) }
@@ -1905,7 +1970,7 @@ private fun LibraryShell(
                 onTrackOptions = { trackActionCandidate = it },
             )
             else -> PlaylistOverviewScreen(
-                playlists = state.summary.playlists,
+                pagedPlaylists = pagedPlaylists,
                 likedCount = likes.songs.size,
                 globalTracks = (catalogState as? HomeUiState.Content)?.feed?.global.orEmpty(),
                 localTracks = (catalogState as? HomeUiState.Content)?.feed?.local.orEmpty(),
@@ -2035,7 +2100,7 @@ private fun LibraryShell(
 
 @Composable
 private fun PlaylistOverviewScreen(
-    playlists: List<UserPlaylist>,
+    pagedPlaylists: LazyPagingItems<UserPlaylist>,
     likedCount: Int,
     globalTracks: List<HomeTrack>,
     localTracks: List<HomeTrack>,
@@ -2078,7 +2143,7 @@ private fun PlaylistOverviewScreen(
         }
         item {
             Card(
-                modifier = Modifier.fillMaxWidth().height(136.dp),
+                modifier = Modifier.fillMaxWidth().height(NavaDimensions.PlaylistHeroHeight),
                 shape = MaterialTheme.shapes.large,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
             ) {
@@ -2086,7 +2151,7 @@ private fun PlaylistOverviewScreen(
                     modifier = Modifier.fillMaxSize().padding(NavaSpacing.Md),
                     verticalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp)) {
+                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(NavaDimensions.ControlXl)) {
                         Icon(
                             Icons.Outlined.Favorite,
                             contentDescription = null,
@@ -2104,15 +2169,15 @@ private fun PlaylistOverviewScreen(
         item {
             Card(
                 onClick = onCreate,
-                modifier = Modifier.fillMaxWidth().height(136.dp),
+                modifier = Modifier.fillMaxWidth().height(NavaDimensions.PlaylistHeroHeight),
                 shape = MaterialTheme.shapes.large,
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF315B5A)),
+                colors = CardDefaults.cardColors(containerColor = NavaPlaylistLiked),
             ) {
                 Column(
                     modifier = Modifier.fillMaxSize().padding(NavaSpacing.Md),
                     verticalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Surface(shape = CircleShape, color = NavaGold, modifier = Modifier.size(48.dp)) {
+                    Surface(shape = CircleShape, color = NavaGold, modifier = Modifier.size(NavaDimensions.ControlXl)) {
                         Icon(Icons.Outlined.PlaylistAdd, contentDescription = null, tint = NavaBlack, modifier = Modifier.padding(NavaSpacing.Sm))
                     }
                     Column {
@@ -2151,7 +2216,7 @@ private fun PlaylistOverviewScreen(
             }
         }
         gridItems(globalTracks, key = { "global-${it.id}" }) { track ->
-            CatalogPlaylistCard(track, Color(0xFF4E3B83)) { onCatalogTrackClick(track) }
+            CatalogPlaylistCard(track, NavaWorldMusic) { onCatalogTrackClick(track) }
         }
         item(span = { GridItemSpan(maxLineSpan) }) {
             Text(stringResource(R.string.local_music), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -2162,16 +2227,27 @@ private fun PlaylistOverviewScreen(
             }
         }
         gridItems(localTracks, key = { "local-${it.id}" }) { track ->
-            CatalogPlaylistCard(track, Color(0xFF8A4D24)) { onCatalogTrackClick(track) }
+            CatalogPlaylistCard(track, NavaLocalMusic) { onCatalogTrackClick(track) }
         }
         item(span = { GridItemSpan(maxLineSpan) }) {
             Text(stringResource(R.string.user_playlists), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         }
-        if (playlists.isEmpty()) {
+        if (pagedPlaylists.itemCount == 0 && pagedPlaylists.loadState.refresh is LoadState.NotLoading) {
             item(span = { GridItemSpan(maxLineSpan) }) { EmptyPlaylistsCard(onCreate) }
         } else {
-            gridItems(playlists, key = UserPlaylist::id) { playlist ->
+            gridItems(pagedPlaylists.itemSnapshotList.items, key = UserPlaylist::id) { playlist ->
                 UserPlaylistCard(playlist, onOpen = { onOpen(playlist.id) }, onEdit = { onEdit(playlist) })
+            }
+            when (pagedPlaylists.loadState.append) {
+                is LoadState.Loading -> item(span = { GridItemSpan(maxLineSpan) }) {
+                    Box(Modifier.fillMaxWidth().padding(NavaSpacing.Md), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+                is LoadState.Error -> item(span = { GridItemSpan(maxLineSpan) }) {
+                    Button(onClick = pagedPlaylists::retry) { Text(stringResource(R.string.retry)) }
+                }
+                else -> Unit
             }
         }
     }
@@ -2194,7 +2270,7 @@ private fun CatalogPlaylistCard(track: HomeTrack, accent: Color, onClick: () -> 
                     modifier = Modifier.fillMaxSize(),
                 )
                 Surface(
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(NavaSpacing.Sm).size(40.dp),
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(NavaSpacing.Sm).size(NavaDimensions.ControlCompact),
                     shape = CircleShape,
                     color = NavaGold,
                     contentColor = NavaBlack,
@@ -2222,7 +2298,7 @@ private fun EmptyPlaylistsCard(onCreate: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
         ) {
-            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.size(72.dp)) {
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.size(NavaDimensions.SearchEmptyIconSize)) {
                 Icon(Icons.Outlined.PlaylistAdd, contentDescription = null, modifier = Modifier.padding(NavaSpacing.Lg))
             }
             Text(stringResource(R.string.no_playlists_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -2241,7 +2317,7 @@ private fun UserPlaylistCard(playlist: UserPlaylist, onOpen: () -> Unit, onEdit:
         onClick = onOpen,
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF283E67)),
+        colors = CardDefaults.cardColors(containerColor = NavaUserPlaylist),
     ) {
         Column {
             Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
@@ -2265,7 +2341,7 @@ private fun UserPlaylistCard(playlist: UserPlaylist, onOpen: () -> Unit, onEdit:
                     Icon(
                         if (playlist.isPublic) Icons.Outlined.Public else Icons.Outlined.Lock,
                         contentDescription = null,
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(NavaDimensions.IconSmall),
                         tint = NavaGold,
                     )
                     Text(stringResource(R.string.track_count, playlist.trackCount.toLong()), style = MaterialTheme.typography.labelLarge, color = NavaWhite)
@@ -2313,7 +2389,7 @@ private fun PlaylistDetailsScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
                 ) {
-                    PlaylistArtwork(details.playlist.coverImageUrl, details.playlist.title, Modifier.size(156.dp))
+                    PlaylistArtwork(details.playlist.coverImageUrl, details.playlist.title, Modifier.size(NavaDimensions.PlaylistDetailsArtworkSize))
                     Text(details.playlist.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                     details.playlist.description?.let {
                         Text(it, color = MaterialTheme.colorScheme.onPrimaryContainer, textAlign = TextAlign.Center)
@@ -2344,7 +2420,7 @@ private fun PlaylistDetailsScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
                     ) {
-                        Icon(Icons.Outlined.MusicNote, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Outlined.MusicNote, contentDescription = null, modifier = Modifier.size(NavaDimensions.ControlXl), tint = MaterialTheme.colorScheme.primary)
                         Text(stringResource(R.string.playlist_no_songs), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text(stringResource(R.string.playlist_no_songs_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
                     }
@@ -2479,14 +2555,14 @@ private fun PlaylistEditorDialog(
                     PlaylistEditorArtwork(
                         model = selectedCover ?: playlist?.coverImageUrl,
                         title = title.ifBlank { stringResource(R.string.playlist_details) },
-                        modifier = Modifier.size(140.dp),
+                        modifier = Modifier.size(NavaDimensions.PlaylistEditorArtworkSize),
                     )
                     Surface(
                         onClick = { coverPicker.launch("image/*") },
-                        modifier = Modifier.align(Alignment.BottomEnd).size(44.dp),
+                        modifier = Modifier.align(Alignment.BottomEnd).size(NavaDimensions.ControlLarge),
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.primary,
-                        shadowElevation = 6.dp,
+                        shadowElevation = NavaDimensions.ElevationMedium,
                     ) {
                         Icon(
                             Icons.Outlined.Edit,
@@ -2581,7 +2657,7 @@ private fun PlaylistEditorArtwork(model: Any?, title: String, modifier: Modifier
         modifier = modifier,
         shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.secondaryContainer,
-        shadowElevation = 8.dp,
+        shadowElevation = NavaDimensions.ElevationHigh,
     ) {
         if (model == null) {
             Icon(
@@ -2652,12 +2728,12 @@ private fun PlaylistTrackPicker(
                 modifier = Modifier.fillMaxWidth(),
             )
             when {
-                loading -> Box(Modifier.fillMaxWidth().height(320.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                filtered.isEmpty() -> Box(Modifier.fillMaxWidth().height(240.dp), contentAlignment = Alignment.Center) {
+                loading -> Box(Modifier.fillMaxWidth().height(NavaDimensions.PickerLoadingHeight), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                filtered.isEmpty() -> Box(Modifier.fillMaxWidth().height(NavaDimensions.PickerEmptyHeight), contentAlignment = Alignment.Center) {
                     Text(stringResource(R.string.no_tracks_found), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 else -> LazyColumn(
-                    modifier = Modifier.fillMaxWidth().height(420.dp),
+                    modifier = Modifier.fillMaxWidth().height(NavaDimensions.SheetListMaxHeight),
                     verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = NavaSpacing.Xl),
                 ) {
@@ -2673,7 +2749,7 @@ private fun PlaylistTrackPicker(
                                     model = track.coverImageUrl,
                                     contentDescription = null,
                                     contentScale = ContentScale.Crop,
-                                    modifier = Modifier.size(56.dp).clip(MaterialTheme.shapes.medium),
+                                    modifier = Modifier.size(NavaDimensions.CatalogPickerArtworkSize).clip(MaterialTheme.shapes.medium),
                                 )
                                 Column(Modifier.weight(1f)) {
                                     Text(track.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -2702,7 +2778,11 @@ private fun SearchShell(
     viewModel: SearchViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val pagedResults = viewModel.pagedResults.collectAsLazyPagingItems()
     val focusManager = LocalFocusManager.current
+    val trackMode = state.resultFilter == SearchResultFilter.All ||
+        state.resultFilter == SearchResultFilter.Tracks
+    val visibleResultCount = if (trackMode) pagedResults.itemCount else state.visibleResultCount
     Column(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.padding(horizontal = NavaSpacing.Lg, vertical = NavaSpacing.Md),
@@ -2819,16 +2899,27 @@ private fun SearchShell(
                 onClear = viewModel::clearHistory,
                 modifier = Modifier.weight(1f),
             )
-            state.loading && state.results.isEmpty() -> Box(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentAlignment = Alignment.Center,
-            ) { CircularProgressIndicator() }
-            state.failed -> SearchMessage(
+            trackMode &&
+                pagedResults.loadState.refresh is LoadState.Loading &&
+                pagedResults.itemCount == 0 -> SearchLoadingShimmer(modifier = Modifier.weight(1f))
+            !trackMode && state.loading && state.results.isEmpty() ->
+                SearchLoadingShimmer(modifier = Modifier.weight(1f))
+            trackMode && pagedResults.loadState.refresh is LoadState.Error -> SearchMessage(
+                title = stringResource(R.string.search_error),
+                body = stringResource(R.string.search_error_hint),
+                action = {
+                    Button(onClick = {
+                        viewModel.retry()
+                        pagedResults.retry()
+                    }) { Text(stringResource(R.string.retry)) }
+                },
+            )
+            !trackMode && state.failed -> SearchMessage(
                 title = stringResource(R.string.search_error),
                 body = stringResource(R.string.search_error_hint),
                 action = { Button(onClick = viewModel::retry) { Text(stringResource(R.string.retry)) } },
             )
-            state.visibleResultCount == 0 -> SearchMessage(
+            visibleResultCount == 0 -> SearchMessage(
                 title = stringResource(R.string.search_empty),
                 body = stringResource(R.string.search_empty_hint),
             )
@@ -2844,16 +2935,19 @@ private fun SearchShell(
             ) {
                 item {
                     Text(
-                        text = stringResource(R.string.search_results_count, state.visibleResultCount),
+                        text = stringResource(R.string.search_results_count, visibleResultCount),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = NavaSpacing.Xs),
                     )
                 }
-                if (state.loading) item { LinearProgressIndicator(modifier = Modifier.fillMaxWidth()) }
                 when (state.resultFilter) {
                     SearchResultFilter.All, SearchResultFilter.Tracks -> {
-                        items(state.results, key = SearchTrack::id) { track ->
+                        items(
+                            count = pagedResults.itemCount,
+                            key = pagedResults.itemKey(SearchTrack::id),
+                        ) { index ->
+                            val track = pagedResults[index] ?: return@items
                             SearchTrackRow(
                                 track = track,
                                 isCurrent = track.id == currentTrackId,
@@ -2877,13 +2971,70 @@ private fun SearchShell(
                         SearchGenreRow(genre = genre, onClick = { viewModel.selectSuggestion(genre.name) })
                     }
                 }
-                if (state.canLoadMore) item {
-                    LaunchedEffect(state.results.size) { viewModel.loadMore() }
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Md),
-                        contentAlignment = Alignment.Center,
-                    ) { CircularProgressIndicator() }
+                if (trackMode && pagedResults.loadState.append is LoadState.Loading) {
+                    item { SearchTrackShimmer() }
                 }
+                if (trackMode && pagedResults.loadState.append is LoadState.Error) {
+                    item {
+                        FilledTonalButton(
+                            onClick = pagedResults::retry,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.retry))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchLoadingShimmer(modifier: Modifier = Modifier) {
+    LazyColumn(
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            horizontal = NavaSpacing.Lg,
+            vertical = NavaSpacing.Sm,
+        ),
+        verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+    ) {
+        items(SHIMMER_PLACEHOLDER_COUNT) { SearchTrackShimmer() }
+    }
+}
+
+@Composable
+private fun SearchTrackShimmer() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            ShimmerBox(
+                Modifier
+                    .size(NavaDimensions.SearchTrackArtworkSize)
+                    .clip(MaterialTheme.shapes.medium),
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
+            ) {
+                ShimmerBox(
+                    Modifier
+                        .width(NavaDimensions.ShimmerLineLongWidth)
+                        .height(NavaDimensions.ShimmerLineHeight)
+                        .clip(MaterialTheme.shapes.small),
+                )
+                ShimmerBox(
+                    Modifier
+                        .width(NavaDimensions.ShimmerLineShortWidth)
+                        .height(NavaDimensions.ShimmerLineHeight)
+                        .clip(MaterialTheme.shapes.small),
+                )
             }
         }
     }
@@ -2929,7 +3080,7 @@ private fun SearchHistoryContent(
                     )
                 }
                 FilledTonalButton(onClick = onClear) {
-                    Icon(Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(NavaDimensions.IconMedium))
                     Spacer(Modifier.width(NavaSpacing.Xs))
                     Text(stringResource(R.string.clear_search_history))
                 }
@@ -2987,7 +3138,7 @@ private fun SearchArtistRow(artist: SearchArtistResult, onClick: () -> Unit) {
                 contentDescription = artist.name,
                 contentScale = ContentScale.Crop,
                 error = painterResource(R.drawable.ic_launcher_foreground),
-                modifier = Modifier.size(68.dp).clip(CircleShape).border(2.dp, MaterialTheme.colorScheme.primary, CircleShape),
+                modifier = Modifier.size(NavaDimensions.SearchArtistArtworkSize).clip(CircleShape).border(NavaDimensions.BorderStrong, MaterialTheme.colorScheme.primary, CircleShape),
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(artist.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -3015,7 +3166,7 @@ private fun SearchGenreRow(genre: SearchGenreResult, onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
         ) {
-            Surface(modifier = Modifier.size(58.dp), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.primary) {
+            Surface(modifier = Modifier.size(NavaDimensions.SearchActionArtworkSize), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.primary) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(Icons.Outlined.QueueMusic, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
                 }
@@ -3044,7 +3195,7 @@ private fun SearchFilterChip(
         selected = selected,
         onClick = onClick,
         leadingIcon = icon?.let { imageVector ->
-            { Icon(imageVector, contentDescription = null, modifier = Modifier.size(18.dp)) }
+            { Icon(imageVector, contentDescription = null, modifier = Modifier.size(NavaDimensions.IconMedium)) }
         },
         label = {
             Text(
@@ -3319,9 +3470,17 @@ private fun androidx.compose.foundation.lazy.LazyListScope.homeContent(
 @Composable
 private fun HomeLoading() {
     Column(
-        modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Xl),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) { CircularProgressIndicator() }
+        modifier = Modifier.fillMaxWidth().padding(horizontal = NavaSpacing.Lg),
+        verticalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+    ) {
+        ShimmerBox(Modifier.fillMaxWidth().height(NavaDimensions.ShimmerCardHeight))
+        repeat(3) {
+            Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md)) {
+                ShimmerBox(Modifier.weight(1f).height(NavaDimensions.QuickActionCardHeight))
+                ShimmerBox(Modifier.weight(1f).height(NavaDimensions.QuickActionCardHeight))
+            }
+        }
+    }
 }
 
 @Composable
@@ -3468,7 +3627,7 @@ private fun DownloadsEmptyCard() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
         ) {
-            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(80.dp)) {
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(NavaDimensions.DownloadsEmptyIconSize)) {
                 Icon(
                     Icons.Outlined.DownloadDone,
                     contentDescription = null,
@@ -3755,10 +3914,10 @@ private data class QuickActionPalette(
     val accent: Color,
 ) {
     companion object {
-        val Liked = QuickActionPalette(Color(0xFF5B2039), Color(0xFF321827), Color(0xFFFF78A6))
-        val Recent = QuickActionPalette(Color(0xFF14504D), Color(0xFF173332), Color(0xFF62DED4))
-        val MyPlaylists = QuickActionPalette(Color(0xFF35356F), Color(0xFF232442), Color(0xFFA8ABFF))
-        val TopPlaylists = QuickActionPalette(Color(0xFF63461A), Color(0xFF382B18), Color(0xFFFFC15C))
+        val Liked = QuickActionPalette(NavaLikedStart, NavaLikedEnd, NavaLikedAccent)
+        val Recent = QuickActionPalette(NavaRecentStart, NavaRecentEnd, NavaRecentAccent)
+        val MyPlaylists = QuickActionPalette(NavaMyPlaylistsStart, NavaMyPlaylistsEnd, NavaMyPlaylistsAccent)
+        val TopPlaylists = QuickActionPalette(NavaTopPlaylistsStart, NavaTopPlaylistsEnd, NavaTopPlaylistsAccent)
     }
 }
 
@@ -3774,8 +3933,8 @@ private fun QuickAction(
     Surface(
         onClick = onClick,
         modifier = modifier
-            .height(104.dp)
-            .border(1.dp, palette.accent.copy(alpha = .24f), MaterialTheme.shapes.large),
+            .height(NavaDimensions.QuickActionCardHeight)
+            .border(NavaDimensions.BorderThin, palette.accent.copy(alpha = .24f), MaterialTheme.shapes.large),
         shape = MaterialTheme.shapes.large,
         color = palette.start,
         contentColor = NavaWhite,
@@ -3790,13 +3949,13 @@ private fun QuickAction(
         ) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Surface(
-                    modifier = Modifier.size(38.dp),
+                    modifier = Modifier.size(NavaDimensions.IconContainer),
                     shape = CircleShape,
                     color = palette.accent.copy(alpha = .18f),
                     contentColor = palette.accent,
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
+                        Icon(icon, contentDescription = null, modifier = Modifier.size(NavaDimensions.IconXxl))
                     }
                 }
                 Spacer(Modifier.weight(1f))
@@ -3872,7 +4031,7 @@ private fun HomeCollectionMessage(@StringRes title: Int, @StringRes hint: Int, o
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
         ) {
-            Icon(Icons.Outlined.MusicNote, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
+            Icon(Icons.Outlined.MusicNote, contentDescription = null, modifier = Modifier.size(NavaDimensions.ControlXl), tint = MaterialTheme.colorScheme.primary)
             Text(stringResource(title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             Text(stringResource(hint), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             onRetry?.let { Button(onClick = it) { Text(stringResource(R.string.retry)) } }
@@ -3901,7 +4060,7 @@ private fun HomeCollectionTrackRow(track: HomeTrack, isCurrent: Boolean, onClick
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.size(NavaDimensions.SearchTrackArtworkSize).clip(MaterialTheme.shapes.medium),
                 )
-                Surface(modifier = Modifier.align(Alignment.BottomEnd).size(28.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary) {
+                Surface(modifier = Modifier.align(Alignment.BottomEnd).size(NavaDimensions.IconDisplay), shape = CircleShape, color = MaterialTheme.colorScheme.primary) {
                     Icon(Icons.Outlined.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.padding(NavaSpacing.Xs))
                 }
             }
@@ -4224,7 +4383,7 @@ private fun ChatNotificationsScreen(
                             horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
                         ) {
                             Surface(
-                                modifier = Modifier.size(48.dp),
+                                modifier = Modifier.size(NavaDimensions.ControlXl),
                                 shape = CircleShape,
                                 color = MaterialTheme.colorScheme.primaryContainer,
                                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -4239,7 +4398,7 @@ private fun ChatNotificationsScreen(
                             }
                             Column(
                                 modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                                verticalArrangement = Arrangement.spacedBy(NavaSpacing.Micro),
                             ) {
                                 Text(
                                     text = conversation.peerName,
@@ -4758,3 +4917,5 @@ private fun SignOutCard(email: String, onSignOut: () -> Unit) {
         )
     }
 }
+
+private const val SHIMMER_PLACEHOLDER_COUNT = 6
