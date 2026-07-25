@@ -146,9 +146,10 @@ import javax.inject.Singleton
 
     private suspend fun PlaylistDto.toDomain(trackCount: Int, fallbackCover: String?) = UserPlaylist(
         id = id,
+        ownerId = ownerId,
         title = title,
         description = description,
-        coverImageUrl = resolvePlaylistCover(coverImageUrl ?: fallbackCover),
+        coverImageUrl = supabase.resolvePlaylistCoverUrl(coverImageUrl ?: fallbackCover),
         isPublic = isPublic,
         trackCount = trackCount,
     )
@@ -158,13 +159,6 @@ import javax.inject.Singleton
         val objectPath = "$userId/playlists/$key.${cover.extension}"
         supabase.storage.from(PLAYLIST_COVERS_BUCKET).upload(objectPath, cover.bytes) { upsert = true }
         return "storage://$PLAYLIST_COVERS_BUCKET/$objectPath"
-    }
-
-    private suspend fun resolvePlaylistCover(value: String?): String? = when {
-        value == null -> null
-        value.startsWith(PLAYLIST_COVERS_PREFIX) -> supabase.storage.from(PLAYLIST_COVERS_BUCKET)
-            .createSignedUrl(value.removePrefix(PLAYLIST_COVERS_PREFIX), COVER_URL_LIFETIME)
-        else -> value.toPublicCoverUrl(supabase)
     }
 
     private fun TrackCardDto.toDomain() = PlaylistTrack(
@@ -180,8 +174,22 @@ import javax.inject.Singleton
     private fun String?.clean(): String? = this?.trim()?.takeIf(String::isNotEmpty)
 }
 
+/**
+ * Playlist covers are either an uploaded object in the private bucket (which needs signing) or a
+ * catalog cover reused as a fallback. Shared so public-playlist browsing renders the same artwork.
+ */
+internal suspend fun SupabaseClient.resolvePlaylistCoverUrl(value: String?): String? = when {
+    value.isNullOrBlank() -> null
+    value.startsWith(PLAYLIST_COVERS_PREFIX) -> runCatching {
+        storage.from(PLAYLIST_COVERS_BUCKET)
+            .createSignedUrl(value.removePrefix(PLAYLIST_COVERS_PREFIX), COVER_URL_LIFETIME)
+    }.getOrNull()
+    else -> value.toPublicCoverUrl(this)
+}
+
 @Serializable private data class PlaylistDto(
     val id: String,
+    @SerialName("owner_id") val ownerId: String,
     val title: String,
     val description: String? = null,
     @SerialName("cover_image_url") val coverImageUrl: String? = null,

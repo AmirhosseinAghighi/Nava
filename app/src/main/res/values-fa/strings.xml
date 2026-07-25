@@ -231,6 +231,12 @@
     <string name="create_playlist">ساخت پلی‌لیست</string>
     <string name="edit_playlist">ویرایش پلی‌لیست</string>
     <string name="playlist_details">پلی‌لیست</string>
+    <string name="play_playlist">پخش</string>
+    <string name="shuffle_playlist">تصادفی</string>
+    <string name="playlist_by_owner">از %1$s</string>
+    <string name="open_playlist">باز کردن پلی‌لیست</string>
+    <string name="playlist_open_failed">پلی‌لیست در دسترس نیست</string>
+    <string name="playlist_open_failed_hint">این پلی‌لیست باز نشد. ممکن است حذف شده یا خصوصی شده باشد.</string>
     <string name="playlist_name">نام پلی‌لیست</string>
     <string name="playlist_description">توضیحات (اختیاری)</string>
     <string name="public_playlist">پلی‌لیست عمومی</string>

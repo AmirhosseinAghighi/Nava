@@ -231,6 +231,12 @@
     <string name="create_playlist">Create playlist</string>
     <string name="edit_playlist">Edit playlist</string>
     <string name="playlist_details">Playlist</string>
+    <string name="play_playlist">Play</string>
+    <string name="shuffle_playlist">Shuffle</string>
+    <string name="playlist_by_owner">By %1$s</string>
+    <string name="open_playlist">Open playlist</string>
+    <string name="playlist_open_failed">Playlist unavailable</string>
+    <string name="playlist_open_failed_hint">This playlist could not be opened. It may have been deleted or made private.</string>
     <string name="playlist_name">Playlist name</string>
     <string name="playlist_description">Description (optional)</string>
     <string name="public_playlist">Public playlist</string>

@@ -2,6 +2,7 @@ package com.example.nava.ui.social
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.nava.data.library.resolvePlaylistCoverUrl
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
@@ -28,7 +29,15 @@ data class SocialPerson(
     val avatarUrl: String?,
     val isFollowing: Boolean,
 )
-data class PublicPlaylist(val id: String, val title: String, val description: String?, val ownerName: String, val trackCount: Long)
+data class PublicPlaylist(
+    val id: String,
+    val ownerId: String,
+    val title: String,
+    val description: String?,
+    val ownerName: String,
+    val coverImageUrl: String?,
+    val trackCount: Long,
+)
 data class SocialProfileDetails(
     val person: SocialPerson,
     val followersCount: Int,
@@ -144,7 +153,17 @@ class SocialViewModel @Inject constructor(private val supabase: SupabaseClient) 
         supabase.postgrest.rpc("get_public_playlists", buildJsonObject {
             put("p_owner_id", userId)
             put("p_limit", 50)
-        }).decodeList<PlaylistDto>().map { PublicPlaylist(it.id, it.title, it.description, it.ownerName, it.trackCount) }
+        }).decodeList<PlaylistDto>().map {
+            PublicPlaylist(
+                id = it.id,
+                ownerId = it.ownerId ?: userId,
+                title = it.title,
+                description = it.description,
+                ownerName = it.ownerName,
+                coverImageUrl = supabase.resolvePlaylistCoverUrl(it.coverImageUrl),
+                trackCount = it.trackCount,
+            )
+        }
 
     private suspend fun loadTopPlaylists(): List<PublicPlaylist> {
         val playlists = supabase.from("playlists").select {
@@ -152,18 +171,34 @@ class SocialViewModel @Inject constructor(private val supabase: SupabaseClient) 
         }.decodeList<PublicPlaylistRow>()
         val ownerNames = supabase.from("profiles").select().decodeList<ProfileNameRow>()
             .associate { it.id to it.displayName }
-        val trackCounts = supabase.from("playlist_tracks").select().decodeList<PlaylistMembershipRow>()
-            .groupingBy(PlaylistMembershipRow::playlistId)
-            .eachCount()
-        return playlists.map { playlist ->
-            PublicPlaylist(
-                id = playlist.id,
-                title = playlist.title,
-                description = playlist.description,
-                ownerName = ownerNames[playlist.ownerId].orEmpty(),
-                trackCount = trackCounts[playlist.id]?.toLong() ?: 0,
-            )
-        }.sortedWith(compareByDescending<PublicPlaylist> { it.trackCount }.thenBy(PublicPlaylist::title)).take(30)
+        val memberships = supabase.from("playlist_tracks").select().decodeList<PlaylistMembershipRow>()
+        val trackCounts = memberships.groupingBy(PlaylistMembershipRow::playlistId).eachCount()
+        // Playlists without an uploaded cover fall back to their first track's artwork, matching
+        // how the owner's own library renders them.
+        val trackCovers = supabase.from("home_track_cards").select().decodeList<TrackCoverRow>()
+            .associate { it.id to it.coverImageUrl }
+        val firstTrackCover = memberships
+            .groupBy(PlaylistMembershipRow::playlistId)
+            .mapValues { (_, rows) ->
+                rows.sortedBy(PlaylistMembershipRow::position)
+                    .firstNotNullOfOrNull { trackCovers[it.trackId] }
+            }
+        return playlists
+            .map { playlist ->
+                PublicPlaylist(
+                    id = playlist.id,
+                    ownerId = playlist.ownerId,
+                    title = playlist.title,
+                    description = playlist.description,
+                    ownerName = ownerNames[playlist.ownerId].orEmpty(),
+                    coverImageUrl = supabase.resolvePlaylistCoverUrl(
+                        playlist.coverImageUrl ?: firstTrackCover[playlist.id],
+                    ),
+                    trackCount = trackCounts[playlist.id]?.toLong() ?: 0,
+                )
+            }
+            .sortedWith(compareByDescending<PublicPlaylist> { it.trackCount }.thenBy(PublicPlaylist::title))
+            .take(30)
     }
 
     private suspend fun signedAvatarUrl(path: String?): String? = path?.let {
@@ -178,10 +213,32 @@ class SocialViewModel @Inject constructor(private val supabase: SupabaseClient) 
     private data class SocialPayload(val people: List<SocialPerson> = emptyList(), val playlists: List<PublicPlaylist> = emptyList())
     @Serializable private data class PersonDto(val id: String, @SerialName("display_name") val displayName: String, @SerialName("avatar_path") val avatarPath: String? = null, @SerialName("is_following") val isFollowing: Boolean) { fun toPerson(avatarUrl: String?) = SocialPerson(id, displayName, avatarPath, avatarUrl, isFollowing) }
     @Serializable private data class ConnectionDto(val id: String, @SerialName("display_name") val displayName: String, @SerialName("avatar_path") val avatarPath: String? = null, @SerialName("is_following") val isFollowing: Boolean) { fun toPerson(avatarUrl: String?) = SocialPerson(id, displayName, avatarPath, avatarUrl, isFollowing) }
-    @Serializable private data class PlaylistDto(val id: String, val title: String, val description: String? = null, @SerialName("owner_name") val ownerName: String, @SerialName("track_count") val trackCount: Long)
-    @Serializable private data class PublicPlaylistRow(val id: String, val title: String, val description: String? = null, @SerialName("owner_id") val ownerId: String)
+    @Serializable private data class PlaylistDto(
+        val id: String,
+        @SerialName("owner_id") val ownerId: String? = null,
+        val title: String,
+        val description: String? = null,
+        @SerialName("owner_name") val ownerName: String,
+        @SerialName("cover_image_url") val coverImageUrl: String? = null,
+        @SerialName("track_count") val trackCount: Long,
+    )
+    @Serializable private data class PublicPlaylistRow(
+        val id: String,
+        val title: String,
+        val description: String? = null,
+        @SerialName("owner_id") val ownerId: String,
+        @SerialName("cover_image_url") val coverImageUrl: String? = null,
+    )
     @Serializable private data class ProfileNameRow(val id: String, @SerialName("display_name") val displayName: String)
-    @Serializable private data class PlaylistMembershipRow(@SerialName("playlist_id") val playlistId: String)
+    @Serializable private data class PlaylistMembershipRow(
+        @SerialName("playlist_id") val playlistId: String,
+        @SerialName("track_id") val trackId: String,
+        val position: Int,
+    )
+    @Serializable private data class TrackCoverRow(
+        val id: String,
+        @SerialName("cover_image_url") val coverImageUrl: String,
+    )
 
     private companion object {
         const val AVATAR_BUCKET = "avatars"

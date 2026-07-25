@@ -59,6 +59,7 @@ object NavaDimensions {
     val PlaylistHeroHeight = 136.dp
     val PlaylistDetailsArtworkSize = 156.dp
     val PlaylistEditorArtworkSize = 140.dp
+    val PublicPlaylistArtworkSize = 72.dp
     val QuickActionCardHeight = 104.dp
     val DownloadsEmptyIconSize = 80.dp
     val SearchArtistArtworkSize = 68.dp

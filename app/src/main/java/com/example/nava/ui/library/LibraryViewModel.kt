@@ -34,6 +34,13 @@ data class LibraryUiState(
     val busy: Boolean = false,
     val failed: Boolean = false,
     val operationFailed: Boolean = false,
+    /**
+     * A playlist opened from public browsing. Kept apart from [selectedPlaylist] so opening
+     * someone's playlist from Top playlists does not also open it in the Library tab.
+     */
+    val viewedPlaylist: PlaylistDetails? = null,
+    val viewedLoading: Boolean = false,
+    val viewedFailed: Boolean = false,
 )
 
 @HiltViewModel class LibraryViewModel @Inject constructor(
@@ -76,6 +83,19 @@ data class LibraryUiState(
 
     fun closePlaylist() = _state.update { it.copy(selectedPlaylist = null, catalog = emptyList()) }
 
+    /** Opens any playlist the signed-in user is allowed to read, including other people's public ones. */
+    fun openViewedPlaylist(playlistId: String) = viewModelScope.launch {
+        _state.update { it.copy(viewedLoading = true, viewedFailed = false, viewedPlaylist = null) }
+        repository.loadPlaylist(playlistId).fold(
+            onSuccess = { details -> _state.update { it.copy(viewedPlaylist = details, viewedLoading = false) } },
+            onFailure = { _state.update { it.copy(viewedLoading = false, viewedFailed = true) } },
+        )
+    }
+
+    fun closeViewedPlaylist() = _state.update {
+        it.copy(viewedPlaylist = null, viewedLoading = false, viewedFailed = false, catalog = emptyList())
+    }
+
     fun loadCatalog() = viewModelScope.launch {
         if (_state.value.catalog.isNotEmpty()) return@launch
         _state.update { it.copy(busy = true, operationFailed = false) }
@@ -98,32 +118,22 @@ data class LibraryUiState(
 
     fun deletePlaylist(playlistId: String) = mutate {
         repository.deletePlaylist(playlistId).getOrThrow()
-        _state.update { it.copy(selectedPlaylist = null, catalog = emptyList()) }
+        _state.update { it.copy(selectedPlaylist = null, viewedPlaylist = null, catalog = emptyList()) }
         refreshSummary()
-    }
-
-    fun addTrack(trackId: String) {
-        val playlistId = _state.value.selectedPlaylist?.playlist?.id ?: return
-        addTrackToPlaylist(playlistId, trackId)
     }
 
     fun addTrackToPlaylist(playlistId: String, trackId: String, onResult: (Boolean) -> Unit = {}) {
         mutate(onResult = onResult) {
             repository.addTrack(playlistId, trackId).getOrThrow()
-            if (_state.value.selectedPlaylist?.playlist?.id == playlistId) {
-                refreshSelected(playlistId)
-            }
+            refreshSelected(playlistId)
             refreshSummary()
         }
     }
 
-    fun removeTrack(trackId: String) {
-        val playlistId = _state.value.selectedPlaylist?.playlist?.id ?: return
-        mutate {
-            repository.removeTrack(playlistId, trackId).getOrThrow()
-            refreshSelected(playlistId)
-            refreshSummary()
-        }
+    fun removeTrack(playlistId: String, trackId: String) = mutate {
+        repository.removeTrack(playlistId, trackId).getOrThrow()
+        refreshSelected(playlistId)
+        refreshSummary()
     }
 
     fun clearOperationError() = _state.update { it.copy(operationFailed = false) }
@@ -146,9 +156,18 @@ data class LibraryUiState(
         repository.load().getOrThrow().let { summary -> _state.update { it.copy(summary = summary) } }
     }
 
+    /** Refreshes whichever open view is showing [playlistId] — the Library tab, public browsing, or both. */
     private suspend fun refreshSelected(playlistId: String) {
+        val showsSelected = _state.value.selectedPlaylist?.playlist?.id == playlistId
+        val showsViewed = _state.value.viewedPlaylist?.playlist?.id == playlistId
+        if (!showsSelected && !showsViewed) return
         repository.loadPlaylist(playlistId).getOrThrow().let { details ->
-            _state.update { it.copy(selectedPlaylist = details) }
+            _state.update {
+                it.copy(
+                    selectedPlaylist = if (showsSelected) details else it.selectedPlaylist,
+                    viewedPlaylist = if (showsViewed) details else it.viewedPlaylist,
+                )
+            }
         }
     }
 

@@ -98,7 +98,9 @@ fun ChatShell(
                 onSend = viewModel::sendText,
                 canShareNowPlaying = nowPlaying != null,
                 onShareNowPlaying = { nowPlaying?.track?.let(viewModel::shareTrack) },
-                onPlaySharedTrack = { viewModel.playSharedTrack(it, playbackViewModel::play) },
+                onPlaySharedTrack = { trackId ->
+                    viewModel.playSharedTrack(trackId) { track -> playbackViewModel.play(track) }
+                },
             )
         }
         if (state.error && state.activeConversation == null) {

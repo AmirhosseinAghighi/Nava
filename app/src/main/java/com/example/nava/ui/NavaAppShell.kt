@@ -233,6 +233,7 @@ import com.example.nava.ui.chat.ChatViewModel
 import com.example.nava.playback.NowPlaying
 import com.example.nava.playback.PlaybackViewModel
 import com.example.nava.playback.RepeatMode
+import com.example.nava.playback.toHomeTrack
 import com.example.nava.ui.theme.NavaMotion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -432,6 +433,20 @@ fun NavaAppShell(
     val profileState by profileViewModel.state.collectAsState()
     val unreadConversations = chatState.conversations.filter { it.unreadCount > 0 }
     val unreadMessageCount = unreadConversations.sumOf(ChatConversation::unreadCount)
+    // Every play carries the collection it came from, so playback keeps following that collection's
+    // order instead of whichever list happened to register itself with the player last.
+    val playTrackInContext: (HomeTrack, List<HomeTrack>) -> Unit = { track, context ->
+        if (nowPlaying?.track?.id != track.id) {
+            playbackViewModel.play(track, context)
+        } else {
+            playbackViewModel.setShuffleSource(context)
+        }
+        playerExpanded = true
+    }
+    val playCollection: (List<HomeTrack>, Boolean) -> Unit = { tracks, shuffle ->
+        playbackViewModel.playCollection(tracks, shuffle)
+        playerExpanded = true
+    }
     LaunchedEffect(shareSuccessRecipient) {
         if (shareSuccessRecipient != null) {
             delay(SHARE_SUCCESS_VISIBLE_MS)
@@ -570,6 +585,12 @@ fun NavaAppShell(
                 modifier = Modifier.padding(padding),
                 onBack = { socialOpen = false },
                 initialSection = socialInitialSection,
+                currentUserId = session.userId,
+                currentTrackId = nowPlaying?.track?.id,
+                libraryViewModel = libraryViewModel,
+                onPlayTrack = playTrackInContext,
+                onPlayCollection = playCollection,
+                onTrackOptions = { queueCandidate = it },
                 viewModel = socialViewModel,
                 chatViewModel = chatViewModel,
                 playbackViewModel = playbackViewModel,
@@ -578,10 +599,7 @@ fun NavaAppShell(
                 modifier = Modifier.padding(padding),
                 likedTracks = likesState.songs,
                 currentTrackId = nowPlaying?.track?.id,
-                onPlay = { track ->
-                    if (nowPlaying?.track?.id != track.id) playbackViewModel.play(track)
-                    playerExpanded = true
-                },
+                onPlay = playTrackInContext,
                 onQueue = { queueCandidate = it },
                 onTrackOptions = { queueCandidate = it },
                 onOpenMyPlaylists = { selectedIndex = 3 },
@@ -589,15 +607,11 @@ fun NavaAppShell(
                     socialInitialSection = SocialSection.PLAYLISTS
                     socialOpen = true
                 },
-                onShuffleSource = playbackViewModel::setShuffleSource,
             )
             selectedIndex == 1 -> SearchShell(
                 modifier = Modifier.padding(padding),
                 currentTrackId = nowPlaying?.track?.id,
-                onTrackClick = { track ->
-                    if (nowPlaying?.track?.id != track.id) playbackViewModel.play(track)
-                    playerExpanded = true
-                },
+                onTrackClick = playTrackInContext,
                 onTrackOptions = { queueCandidate = it },
                 viewModel = searchViewModel,
             )
@@ -606,19 +620,18 @@ fun NavaAppShell(
                 state = downloadState,
                 currentTrackId = nowPlaying?.track?.id,
                 viewModel = downloadViewModel,
-                onPlay = { download ->
-                    playbackViewModel.playOffline(download)
+                onPlay = { download, downloads ->
+                    playbackViewModel.playOffline(download, downloads.map(OfflineTrackEntity::toHomeTrack))
                     playerExpanded = true
                 },
             )
             selectedIndex == 3 -> LibraryShell(
                 modifier = Modifier.padding(padding),
                 likesViewModel = likesViewModel,
+                currentUserId = session.userId,
                 currentTrackId = nowPlaying?.track?.id,
-                onTrackClick = { track ->
-                    if (nowPlaying?.track?.id != track.id) playbackViewModel.play(track)
-                    playerExpanded = true
-                },
+                onPlayTrack = playTrackInContext,
+                onPlayCollection = playCollection,
                 onTrackOptions = { queueCandidate = it },
                 viewModel = libraryViewModel,
             )
@@ -1924,8 +1937,10 @@ private fun NowPlayingArtwork(
 private fun LibraryShell(
     modifier: Modifier,
     likesViewModel: LikesViewModel,
+    currentUserId: String,
     currentTrackId: String?,
-    onTrackClick: (HomeTrack) -> Unit,
+    onPlayTrack: (HomeTrack, List<HomeTrack>) -> Unit,
+    onPlayCollection: (List<HomeTrack>, Boolean) -> Unit,
     onTrackOptions: (HomeTrack) -> Unit,
     viewModel: LibraryViewModel = hiltViewModel(),
     catalogViewModel: HomeViewModel = hiltViewModel(),
@@ -1937,11 +1952,11 @@ private fun LibraryShell(
     var editorOpen by remember { mutableStateOf(false) }
     var editorPlaylist by remember { mutableStateOf<UserPlaylist?>(null) }
     var deleteCandidate by remember { mutableStateOf<UserPlaylist?>(null) }
-    var trackActionCandidate by remember { mutableStateOf<PlaylistTrack?>(null) }
-    var trackPickerOpen by remember { mutableStateOf(false) }
 
     BackHandler(enabled = state.selectedPlaylist != null) { viewModel.closePlaylist() }
 
+    val globalTracks = (catalogState as? HomeUiState.Content)?.feed?.global.orEmpty()
+    val localTracks = (catalogState as? HomeUiState.Content)?.feed?.local.orEmpty()
     val selectedPlaylist = state.selectedPlaylist
     Box(modifier = modifier.fillMaxSize()) {
         when {
@@ -1953,27 +1968,24 @@ private fun LibraryShell(
                 body = stringResource(R.string.library_error_hint),
                 action = { Button(onClick = viewModel::reload) { Text(stringResource(R.string.retry)) } },
             )
-            selectedPlaylist != null -> PlaylistDetailsScreen(
+            selectedPlaylist != null -> PlaylistDetailsHost(
                 details = selectedPlaylist,
-                currentTrackId = currentTrackId,
+                editable = selectedPlaylist.playlist.ownerId == currentUserId,
+                ownerName = null,
                 busy = state.busy || state.loadingDetails,
+                catalog = state.catalog,
+                currentTrackId = currentTrackId,
+                viewModel = viewModel,
                 onBack = viewModel::closePlaylist,
-                onEdit = {
-                    editorPlaylist = selectedPlaylist.playlist
-                    editorOpen = true
-                },
-                onAddTracks = {
-                    trackPickerOpen = true
-                    viewModel.loadCatalog()
-                },
-                onTrackClick = { onTrackClick(it.toHomeTrack()) },
-                onTrackOptions = { trackActionCandidate = it },
+                onPlayTrack = onPlayTrack,
+                onPlayCollection = onPlayCollection,
+                onTrackOptions = onTrackOptions,
             )
             else -> PlaylistOverviewScreen(
                 pagedPlaylists = pagedPlaylists,
                 likedCount = likes.songs.size,
-                globalTracks = (catalogState as? HomeUiState.Content)?.feed?.global.orEmpty(),
-                localTracks = (catalogState as? HomeUiState.Content)?.feed?.local.orEmpty(),
+                globalTracks = globalTracks,
+                localTracks = localTracks,
                 catalogLoading = catalogState == HomeUiState.Loading,
                 catalogFailed = catalogState == HomeUiState.Error,
                 onCreate = {
@@ -1986,7 +1998,8 @@ private fun LibraryShell(
                     editorOpen = true
                 },
                 onCatalogRetry = catalogViewModel::reload,
-                onCatalogTrackClick = onTrackClick,
+                onGlobalTrackClick = { onPlayTrack(it, globalTracks) },
+                onLocalTrackClick = { onPlayTrack(it, localTracks) },
             )
         }
         if (state.busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter))
@@ -2012,77 +2025,13 @@ private fun LibraryShell(
     }
 
     deleteCandidate?.let { playlist ->
-        AlertDialog(
-            onDismissRequest = { deleteCandidate = null },
-            icon = {
-                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.errorContainer) {
-                    Icon(
-                        Icons.Outlined.Delete,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onErrorContainer,
-                        modifier = Modifier.padding(NavaSpacing.Md),
-                    )
-                }
+        PlaylistDeleteDialog(
+            playlist = playlist,
+            onDismiss = { deleteCandidate = null },
+            onConfirm = {
+                viewModel.deletePlaylist(playlist.id)
+                deleteCandidate = null
             },
-            title = { Text(stringResource(R.string.delete_playlist), fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
-                    Text(stringResource(R.string.delete_playlist_confirmation, playlist.title))
-                    Text(
-                        stringResource(R.string.delete_playlist_warning),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.deletePlaylist(playlist.id)
-                        deleteCandidate = null
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.onError,
-                    ),
-                ) {
-                    Icon(Icons.Outlined.Delete, contentDescription = null)
-                    Spacer(Modifier.width(NavaSpacing.Xs))
-                    Text(stringResource(R.string.delete))
-                }
-            },
-            dismissButton = {
-                OutlinedButton(onClick = { deleteCandidate = null }) { Text(stringResource(R.string.cancel)) }
-            },
-        )
-    }
-
-    trackActionCandidate?.let { track ->
-        PlaylistTrackActionsDialog(
-            track = track,
-            onDismiss = { trackActionCandidate = null },
-            onPlay = {
-                onTrackClick(track.toHomeTrack())
-                trackActionCandidate = null
-            },
-            onMore = {
-                onTrackOptions(track.toHomeTrack())
-                trackActionCandidate = null
-            },
-            onRemove = {
-                viewModel.removeTrack(track.id)
-                trackActionCandidate = null
-            },
-        )
-    }
-
-    if (trackPickerOpen) {
-        PlaylistTrackPicker(
-            catalog = state.catalog,
-            existingTrackIds = state.selectedPlaylist?.tracks.orEmpty().mapTo(mutableSetOf(), PlaylistTrack::id),
-            loading = state.busy && state.catalog.isEmpty(),
-            onDismiss = { trackPickerOpen = false },
-            onAdd = viewModel::addTrack,
         )
     }
 
@@ -2098,6 +2047,155 @@ private fun LibraryShell(
     }
 }
 
+/**
+ * The playlist page, together with everything that acts on it. Shared by the Library tab and by
+ * public browsing; [editable] is what separates "my playlist" from "someone else's", so the same
+ * screen serves both instead of a near-duplicate read-only copy.
+ */
+@Composable
+private fun PlaylistDetailsHost(
+    details: com.example.nava.domain.library.PlaylistDetails,
+    editable: Boolean,
+    ownerName: String?,
+    busy: Boolean,
+    catalog: List<PlaylistTrack>,
+    currentTrackId: String?,
+    viewModel: LibraryViewModel,
+    onBack: () -> Unit,
+    onPlayTrack: (HomeTrack, List<HomeTrack>) -> Unit,
+    onPlayCollection: (List<HomeTrack>, Boolean) -> Unit,
+    onTrackOptions: (HomeTrack) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val playlistId = details.playlist.id
+    var editorOpen by remember(playlistId) { mutableStateOf(false) }
+    var deleteRequested by remember(playlistId) { mutableStateOf(false) }
+    var trackActionCandidate by remember(playlistId) { mutableStateOf<PlaylistTrack?>(null) }
+    var trackPickerOpen by remember(playlistId) { mutableStateOf(false) }
+    val playlistTracks = remember(details.tracks) { details.tracks.map(PlaylistTrack::toHomeTrack) }
+
+    PlaylistDetailsScreen(
+        details = details,
+        currentTrackId = currentTrackId,
+        busy = busy,
+        editable = editable,
+        ownerName = ownerName,
+        onBack = onBack,
+        onEdit = { editorOpen = true },
+        onAddTracks = {
+            trackPickerOpen = true
+            viewModel.loadCatalog()
+        },
+        onPlayAll = { onPlayCollection(playlistTracks, false) },
+        onShuffleAll = { onPlayCollection(playlistTracks, true) },
+        onTrackClick = { onPlayTrack(it.toHomeTrack(), playlistTracks) },
+        onTrackOptions = { trackActionCandidate = it },
+        modifier = modifier,
+    )
+
+    if (editorOpen && editable) {
+        PlaylistEditorDialog(
+            playlist = details.playlist,
+            busy = busy,
+            onDismiss = { editorOpen = false },
+            onSave = { title, description, isPublic, coverUri ->
+                viewModel.updatePlaylist(playlistId, title, description, isPublic, coverUri)
+                editorOpen = false
+            },
+            onDelete = {
+                editorOpen = false
+                deleteRequested = true
+            },
+        )
+    }
+
+    if (deleteRequested && editable) {
+        PlaylistDeleteDialog(
+            playlist = details.playlist,
+            onDismiss = { deleteRequested = false },
+            onConfirm = {
+                deleteRequested = false
+                viewModel.deletePlaylist(playlistId)
+                onBack()
+            },
+        )
+    }
+
+    trackActionCandidate?.let { track ->
+        PlaylistTrackActionsDialog(
+            track = track,
+            removable = editable,
+            onDismiss = { trackActionCandidate = null },
+            onPlay = {
+                onPlayTrack(track.toHomeTrack(), playlistTracks)
+                trackActionCandidate = null
+            },
+            onMore = {
+                onTrackOptions(track.toHomeTrack())
+                trackActionCandidate = null
+            },
+            onRemove = {
+                viewModel.removeTrack(playlistId, track.id)
+                trackActionCandidate = null
+            },
+        )
+    }
+
+    if (trackPickerOpen && editable) {
+        PlaylistTrackPicker(
+            catalog = catalog,
+            existingTrackIds = details.tracks.mapTo(mutableSetOf(), PlaylistTrack::id),
+            loading = busy && catalog.isEmpty(),
+            onDismiss = { trackPickerOpen = false },
+            onAdd = { trackId -> viewModel.addTrackToPlaylist(playlistId, trackId) },
+        )
+    }
+}
+
+@Composable
+private fun PlaylistDeleteDialog(playlist: UserPlaylist, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.errorContainer) {
+                Icon(
+                    Icons.Outlined.Delete,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.padding(NavaSpacing.Md),
+                )
+            }
+        },
+        title = { Text(stringResource(R.string.delete_playlist), fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                Text(stringResource(R.string.delete_playlist_confirmation, playlist.title))
+                Text(
+                    stringResource(R.string.delete_playlist_warning),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
+            ) {
+                Icon(Icons.Outlined.Delete, contentDescription = null)
+                Spacer(Modifier.width(NavaSpacing.Xs))
+                Text(stringResource(R.string.delete))
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
+}
+
 @Composable
 private fun PlaylistOverviewScreen(
     pagedPlaylists: LazyPagingItems<UserPlaylist>,
@@ -2110,7 +2208,8 @@ private fun PlaylistOverviewScreen(
     onOpen: (String) -> Unit,
     onEdit: (UserPlaylist) -> Unit,
     onCatalogRetry: () -> Unit,
-    onCatalogTrackClick: (HomeTrack) -> Unit,
+    onGlobalTrackClick: (HomeTrack) -> Unit,
+    onLocalTrackClick: (HomeTrack) -> Unit,
 ) {
     LazyVerticalGrid(
         modifier = Modifier.fillMaxSize(),
@@ -2216,7 +2315,7 @@ private fun PlaylistOverviewScreen(
             }
         }
         gridItems(globalTracks, key = { "global-${it.id}" }) { track ->
-            CatalogPlaylistCard(track, NavaWorldMusic) { onCatalogTrackClick(track) }
+            CatalogPlaylistCard(track, NavaWorldMusic) { onGlobalTrackClick(track) }
         }
         item(span = { GridItemSpan(maxLineSpan) }) {
             Text(stringResource(R.string.local_music), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -2227,7 +2326,7 @@ private fun PlaylistOverviewScreen(
             }
         }
         gridItems(localTracks, key = { "local-${it.id}" }) { track ->
-            CatalogPlaylistCard(track, NavaLocalMusic) { onCatalogTrackClick(track) }
+            CatalogPlaylistCard(track, NavaLocalMusic) { onLocalTrackClick(track) }
         }
         item(span = { GridItemSpan(maxLineSpan) }) {
             Text(stringResource(R.string.user_playlists), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -2356,14 +2455,19 @@ private fun PlaylistDetailsScreen(
     details: com.example.nava.domain.library.PlaylistDetails,
     currentTrackId: String?,
     busy: Boolean,
+    editable: Boolean,
+    ownerName: String?,
     onBack: () -> Unit,
     onEdit: () -> Unit,
     onAddTracks: () -> Unit,
+    onPlayAll: () -> Unit,
+    onShuffleAll: () -> Unit,
     onTrackClick: (PlaylistTrack) -> Unit,
     onTrackOptions: (PlaylistTrack) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(
             start = NavaSpacing.Lg,
             end = NavaSpacing.Lg,
@@ -2376,7 +2480,9 @@ private fun PlaylistDetailsScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBack, contentDescription = stringResource(R.string.back)) }
                 Text(stringResource(R.string.playlist_details), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                IconButton(onClick = onEdit) { Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.edit_playlist)) }
+                if (editable) {
+                    IconButton(onClick = onEdit) { Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.edit_playlist)) }
+                }
             }
         }
         item {
@@ -2391,6 +2497,14 @@ private fun PlaylistDetailsScreen(
                 ) {
                     PlaylistArtwork(details.playlist.coverImageUrl, details.playlist.title, Modifier.size(NavaDimensions.PlaylistDetailsArtworkSize))
                     Text(details.playlist.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    ownerName?.takeIf(String::isNotBlank)?.let {
+                        Text(
+                            stringResource(R.string.playlist_by_owner, it),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                     details.playlist.description?.let {
                         Text(it, color = MaterialTheme.colorScheme.onPrimaryContainer, textAlign = TextAlign.Center)
                     }
@@ -2401,10 +2515,24 @@ private fun PlaylistDetailsScreen(
                         ),
                         style = MaterialTheme.typography.labelLarge,
                     )
-                    Button(onClick = onAddTracks, enabled = !busy) {
-                        Icon(Icons.Outlined.PlaylistAdd, contentDescription = null)
-                        Spacer(Modifier.width(NavaSpacing.Sm))
-                        Text(stringResource(R.string.add_songs))
+                    Row(horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
+                        Button(onClick = onPlayAll, enabled = details.tracks.isNotEmpty()) {
+                            Icon(Icons.Outlined.PlayArrow, contentDescription = null)
+                            Spacer(Modifier.width(NavaSpacing.Sm))
+                            Text(stringResource(R.string.play_playlist))
+                        }
+                        FilledTonalButton(onClick = onShuffleAll, enabled = details.tracks.isNotEmpty()) {
+                            Icon(Icons.Outlined.Shuffle, contentDescription = null)
+                            Spacer(Modifier.width(NavaSpacing.Sm))
+                            Text(stringResource(R.string.shuffle_playlist))
+                        }
+                    }
+                    if (editable) {
+                        OutlinedButton(onClick = onAddTracks, enabled = !busy) {
+                            Icon(Icons.Outlined.PlaylistAdd, contentDescription = null)
+                            Spacer(Modifier.width(NavaSpacing.Sm))
+                            Text(stringResource(R.string.add_songs))
+                        }
                     }
                 }
             }
@@ -2681,6 +2809,7 @@ private fun PlaylistEditorArtwork(model: Any?, title: String, modifier: Modifier
 @Composable
 private fun PlaylistTrackActionsDialog(
     track: PlaylistTrack,
+    removable: Boolean,
     onDismiss: () -> Unit,
     onPlay: () -> Unit,
     onMore: () -> Unit,
@@ -2693,7 +2822,9 @@ private fun PlaylistTrackActionsDialog(
             Column(verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm)) {
                 SongActionRow(Icons.Outlined.PlayArrow, stringResource(R.string.play_now), onClick = onPlay)
                 SongActionRow(Icons.Outlined.MoreVert, stringResource(R.string.more_song_actions), onClick = onMore)
-                SongActionRow(Icons.Outlined.Delete, stringResource(R.string.remove_from_playlist), onClick = onRemove)
+                if (removable) {
+                    SongActionRow(Icons.Outlined.Delete, stringResource(R.string.remove_from_playlist), onClick = onRemove)
+                }
             }
         },
         confirmButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
@@ -2773,7 +2904,7 @@ private fun PlaylistTrackPicker(
 private fun SearchShell(
     modifier: Modifier,
     currentTrackId: String?,
-    onTrackClick: (HomeTrack) -> Unit,
+    onTrackClick: (HomeTrack, List<HomeTrack>) -> Unit,
     onTrackOptions: (HomeTrack) -> Unit,
     viewModel: SearchViewModel = hiltViewModel(),
 ) {
@@ -2954,7 +3085,11 @@ private fun SearchShell(
                                 onClick = {
                                     viewModel.submitSearch()
                                     focusManager.clearFocus()
-                                    onTrackClick(track.toHomeTrack())
+                                    // Continue through the results that are already loaded.
+                                    onTrackClick(
+                                        track.toHomeTrack(),
+                                        pagedResults.itemSnapshotList.items.map(SearchTrack::toHomeTrack),
+                                    )
                                 },
                                 onOptions = {
                                     viewModel.submitSearch()
@@ -3341,22 +3476,32 @@ private fun HomeShell(
     quickViewModel: HomeQuickViewModel = hiltViewModel(),
     likedTracks: List<HomeTrack>,
     currentTrackId: String?,
-    onPlay: (HomeTrack) -> Unit,
+    onPlay: (HomeTrack, List<HomeTrack>) -> Unit,
     onQueue: (HomeTrack) -> Unit,
     onTrackOptions: (HomeTrack) -> Unit,
     onOpenMyPlaylists: () -> Unit,
     onOpenTopPlaylists: () -> Unit,
-    onShuffleSource: (List<HomeTrack>) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
     val quickState by quickViewModel.state.collectAsState()
     var quickCollection by rememberSaveable { mutableStateOf<HomeQuickCollection?>(null) }
+    // The feed is the ordering context for anything started from the home screen. It is passed per
+    // tap rather than pushed into the player up front, so navigating home cannot silently replace
+    // the order of a playlist that is already playing.
+    val feedTracks = remember(state) {
+        (state as? HomeUiState.Content)?.feed?.let { feed ->
+            (feed.featured + feed.trending + feed.newest + feed.global + feed.local)
+                .distinctBy(HomeTrack::id)
+        }.orEmpty()
+    }
     quickCollection?.let { collection ->
+        val collectionTracks =
+            if (collection == HomeQuickCollection.LIKED) likedTracks else quickState.recentTracks
         HomeCollectionScreen(
             modifier = modifier,
             title = stringResource(if (collection == HomeQuickCollection.LIKED) R.string.quick_liked else R.string.quick_recent),
             subtitle = stringResource(if (collection == HomeQuickCollection.LIKED) R.string.liked_collection_subtitle else R.string.recent_collection_subtitle),
-            tracks = if (collection == HomeQuickCollection.LIKED) likedTracks else quickState.recentTracks,
+            tracks = collectionTracks,
             loading = collection == HomeQuickCollection.RECENT && quickState.loadingRecent,
             failed = collection == HomeQuickCollection.RECENT && quickState.recentFailed,
             emptyTitle = if (collection == HomeQuickCollection.LIKED) R.string.liked_collection_empty else R.string.recent_collection_empty,
@@ -3364,19 +3509,13 @@ private fun HomeShell(
             currentTrackId = currentTrackId,
             onBack = { quickCollection = null },
             onRetry = quickViewModel::reloadRecent,
-            onPlay = onPlay,
+            // Playing from a collection screen continues through that collection.
+            onPlay = { track -> onPlay(track, collectionTracks) },
             onOptions = onTrackOptions,
         )
         return
     }
-    (state as? HomeUiState.Content)?.feed?.let { feed ->
-        LaunchedEffect(feed) {
-            onShuffleSource(
-                (feed.featured + feed.trending + feed.newest + feed.global + feed.local)
-                    .distinctBy(HomeTrack::id),
-            )
-        }
-    }
+    val onPlayFromFeed: (HomeTrack) -> Unit = { track -> onPlay(track, feedTracks) }
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xl),
@@ -3403,7 +3542,7 @@ private fun HomeShell(
             HomeUiState.Error -> item { HomeError(onRetry = viewModel::reload) }
             is HomeUiState.Content -> homeContent(
                 state = current,
-                onPlay = onPlay,
+                onPlay = onPlayFromFeed,
                 onQueue = onQueue,
                 onLiked = { quickCollection = HomeQuickCollection.LIKED },
                 onRecent = {
@@ -3501,7 +3640,7 @@ private fun DownloadsShell(
     state: DownloadsUiState,
     currentTrackId: String?,
     viewModel: DownloadViewModel,
-    onPlay: (OfflineTrackEntity) -> Unit,
+    onPlay: (OfflineTrackEntity, List<OfflineTrackEntity>) -> Unit,
 ) {
     var selectedSort by remember { mutableStateOf(DownloadSort.Newest) }
     val sortedDownloads = remember(state.downloads, selectedSort) {
@@ -3600,7 +3739,8 @@ private fun DownloadsShell(
                         DownloadedTrackCard(
                             track = track,
                             isCurrent = track.trackId == currentTrackId,
-                            onClick = { onPlay(track) },
+                            // Keep the list's current sort order as the playback order.
+                            onClick = { onPlay(track, sortedDownloads) },
                         )
                     }
                 }
@@ -4445,16 +4585,33 @@ private fun SocialShell(
     modifier: Modifier,
     onBack: () -> Unit,
     initialSection: SocialSection = SocialSection.PEOPLE,
+    currentUserId: String,
+    currentTrackId: String?,
+    libraryViewModel: LibraryViewModel,
+    onPlayTrack: (HomeTrack, List<HomeTrack>) -> Unit,
+    onPlayCollection: (List<HomeTrack>, Boolean) -> Unit,
+    onTrackOptions: (HomeTrack) -> Unit,
     viewModel: SocialViewModel = hiltViewModel(),
     chatViewModel: ChatViewModel = hiltViewModel(),
     playbackViewModel: PlaybackViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val libraryState by libraryViewModel.state.collectAsState()
     var messagesOpen by rememberSaveable { mutableStateOf(false) }
+    var openedPlaylist by remember { mutableStateOf<PublicPlaylist?>(null) }
+    val closePlaylist = {
+        openedPlaylist = null
+        libraryViewModel.closeViewedPlaylist()
+    }
+    val openPlaylist: (PublicPlaylist) -> Unit = { playlist ->
+        openedPlaylist = playlist
+        libraryViewModel.openViewedPlaylist(playlist.id)
+    }
     LaunchedEffect(initialSection) { viewModel.select(initialSection) }
     BackHandler {
         when {
             messagesOpen -> messagesOpen = false
+            openedPlaylist != null -> closePlaylist()
             state.selectedPerson != null -> viewModel.closeProfile()
             else -> onBack()
         }
@@ -4466,6 +4623,37 @@ private fun SocialShell(
             viewModel = chatViewModel,
             playbackViewModel = playbackViewModel,
         )
+        return
+    }
+    openedPlaylist?.let { playlist ->
+        val details = libraryState.viewedPlaylist
+        when {
+            details != null -> PlaylistDetailsHost(
+                details = details,
+                // The same page doubles as the owner's editor when they browse into their own playlist.
+                editable = details.playlist.ownerId == currentUserId,
+                ownerName = playlist.ownerName,
+                busy = libraryState.busy,
+                catalog = libraryState.catalog,
+                currentTrackId = currentTrackId,
+                viewModel = libraryViewModel,
+                onBack = closePlaylist,
+                onPlayTrack = onPlayTrack,
+                onPlayCollection = onPlayCollection,
+                onTrackOptions = onTrackOptions,
+                modifier = modifier,
+            )
+            libraryState.viewedFailed -> SearchMessage(
+                title = stringResource(R.string.playlist_open_failed),
+                body = stringResource(R.string.playlist_open_failed_hint),
+                action = {
+                    Button(onClick = { libraryViewModel.openViewedPlaylist(playlist.id) }) {
+                        Text(stringResource(R.string.retry))
+                    }
+                },
+            )
+            else -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        }
         return
     }
     state.selectedPerson?.let { person ->
@@ -4480,6 +4668,7 @@ private fun SocialShell(
                 chatViewModel.open(state.profileDetails?.person ?: person)
                 messagesOpen = true
             },
+            onOpenPlaylist = openPlaylist,
         )
         return
     }
@@ -4547,7 +4736,9 @@ private fun SocialShell(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NavaSpacing.Lg, vertical = NavaSpacing.Sm),
                 verticalArrangement = Arrangement.spacedBy(NavaSpacing.Sm),
             ) {
-                items(state.playlists, key = PublicPlaylist::id) { playlist -> PublicPlaylistCard(playlist) }
+                items(state.playlists, key = PublicPlaylist::id) { playlist ->
+                    PublicPlaylistCard(playlist, onOpen = { openPlaylist(playlist) })
+                }
             }
             else -> LazyColumn(
                 modifier = Modifier.weight(1f),
@@ -4636,6 +4827,7 @@ private fun PublicProfileScreen(
     onBack: () -> Unit,
     onToggleFollow: () -> Unit,
     onMessage: () -> Unit,
+    onOpenPlaylist: (PublicPlaylist) -> Unit,
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -4695,7 +4887,9 @@ private fun PublicProfileScreen(
                 if (profile.playlists.isEmpty()) {
                     item { Text(stringResource(R.string.public_playlists_empty_hint), color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 } else {
-                    items(profile.playlists, key = PublicPlaylist::id) { playlist -> PublicPlaylistCard(playlist) }
+                    items(profile.playlists, key = PublicPlaylist::id) { playlist ->
+                        PublicPlaylistCard(playlist, onOpen = { onOpenPlaylist(playlist) })
+                    }
                 }
             }
         }
@@ -4720,19 +4914,54 @@ private fun ProfileStat(value: String, @StringRes label: Int, modifier: Modifier
 }
 
 @Composable
-private fun PublicPlaylistCard(playlist: PublicPlaylist) {
+private fun PublicPlaylistCard(playlist: PublicPlaylist, onOpen: () -> Unit) {
     Card(
+        onClick = onOpen,
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
         shape = MaterialTheme.shapes.large,
     ) {
-        Column(modifier = Modifier.padding(NavaSpacing.Lg), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
-            Text(playlist.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(playlist.ownerName, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-            playlist.description?.takeIf(String::isNotBlank)?.let {
-                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(NavaSpacing.Md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(NavaSpacing.Md),
+        ) {
+            PlaylistArtwork(
+                url = playlist.coverImageUrl,
+                title = playlist.title,
+                modifier = Modifier.size(NavaDimensions.PublicPlaylistArtworkSize),
+            )
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(NavaSpacing.Xs)) {
+                Text(
+                    playlist.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    playlist.ownerName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                playlist.description?.takeIf(String::isNotBlank)?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(stringResource(R.string.track_count, playlist.trackCount), style = MaterialTheme.typography.labelLarge)
             }
-            Text(stringResource(R.string.track_count, playlist.trackCount), style = MaterialTheme.typography.labelLarge)
+            Icon(
+                Icons.Outlined.ChevronRight,
+                contentDescription = stringResource(R.string.open_playlist),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

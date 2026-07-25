@@ -4,6 +4,7 @@ import com.example.nava.domain.catalog.HomeTrack
 
 data class UserPlaylist(
     val id: String,
+    val ownerId: String,
     val title: String,
     val description: String?,
     val coverImageUrl: String?,
